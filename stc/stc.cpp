@@ -49,17 +49,23 @@ public:
   grid(std::istream &cin2)
   {
     //contruct from stdin (!)
-    for (int i = 0; i < 12; i++) {
-      string row;
-      cin2 >> row; cin2.ignore();
-      for(int j=0;j<6;++j)
-	{
-	  if(row[j] == '.')
-	    g_raw[i][j] = 99;
-	  else g_raw[i][j] = row[j]-48;
-	}
+    for (int i = 0; i < 12; i++)
+      {
+	string row;
+	cin2 >> row; cin2.ignore();
+	for(int j=0;j<6;++j)
+	  {
+	    if(row[j] == '.')
+	      g_raw[i][j] = 99;
+	    else g_raw[i][j] = row[j]-48;
+	  }
+      }
 
-    }  
+    //update top_col
+    for(int i=0;i<6;++i)
+      {
+	top_col[i] = find_top_col_compute(*this,i);
+      }
   }
 
 
@@ -71,7 +77,8 @@ public:
 			 int *orientation,
 			 int depth_0_col,
 			 int depth_0_orient,
-			 int max_depth)  //return une colonne et une orientation pour le 0th truc qui arrive
+			 int max_depth,
+			 int max_depth_aleat)  //return une colonne et une orientation pour le 0th truc qui arrive
   {
 
     if(depth == max_depth)
@@ -127,7 +134,8 @@ public:
 			    orientation,
 			    depth_0_col,
 			    depth_0_orient,
-			    max_depth);
+			    max_depth,
+			    max_depth_aleat);
 	}
   }
   
@@ -153,6 +161,10 @@ public:
 	grid_tmp.g_raw[topA][col+1] = pg.cb;
 	grid_tmp.g_raw[topB][col] = pg.ca;
 
+
+	--(grid_tmp.top_col[col+1]);
+	--(grid_tmp.top_col[col]);
+	
 	//	cerr << "toa " << topA << " toB " << topB << endl;
 	break;
       
@@ -162,6 +174,8 @@ public:
 	grid_tmp.g_raw[top][col] = pg.ca;
 	grid_tmp.g_raw[top-1][col] = pg.cb;
 
+	grid_tmp.top_col[col] -= 2;
+	
 	break;
       case 2:
 	if(col == 0) throw logic_error("col 0, orient 2 !!");
@@ -172,7 +186,9 @@ public:
 	grid_tmp.g_raw[topA][col-1] = pg.cb;
 	grid_tmp.g_raw[topB][col] = pg.ca;
       
-
+	--(grid_tmp.top_col[col-1]);
+	--(grid_tmp.top_col[col]);
+	
 	break;
       case 3:
 	top = find_top_col(grid_tmp,col);
@@ -180,6 +196,7 @@ public:
 	grid_tmp.g_raw[top][col] = pg.cb;
 	grid_tmp.g_raw[top-1][col] = pg.ca;
 
+	grid_tmp.top_col[col] -= 2;
 	break;
 	
       }
@@ -280,7 +297,7 @@ public:
     for(int i=0;i<12;++i)
       for(int j=0;j<6;++j)
 	{
-	  if(g.g_raw[i][j] == 99 || visited[i][j] > 0) continue;
+	  if(g.g_raw[i][j] == 99 || visited[i][j] > 0 || g.g_raw[i][j]==0) continue;
 	  
 	  short color = g.g_raw[i][j];
 	  
@@ -390,10 +407,16 @@ public:
       {
 	g.g_raw[i][line] = g.g_raw[i-1][line];
 	g.g_raw[i-1][line] = 99;
+	--(g.top_col[line]);
       }
   }
+
+  int find_top_col(const grid &g,int col) const
+  {
+    return g.top_col[col];
+  }
   
-  int find_top_col(const grid &g,int col) const //if coll is full, -1 is returned, if not, the col is turned
+  int find_top_col_compute(const grid &g,int col) const //if coll is full, -1 is returned, if not, the col is turned
   {
     for(int i=0;i<12;++i)
       {
@@ -424,6 +447,7 @@ public:
   }
 private:
   short int g_raw[12][6];
+  short int top_col[6];
 };
 /**
  * Auto-generated code below aims at helping you parse
@@ -469,7 +493,8 @@ int main()
 			  &orientation,
 			  0,
 			  0,
-			  3);
+			  3,
+			  7);
     
     cerr << "col " << col << " or " << orientation << " for value " << max_score << endl;
     // Write an action using cout. DON'T FORGET THE "<< endl"
@@ -479,6 +504,6 @@ int main()
 
     // "x rotation": the column in which to drop your pair of blocks folowed by its rotation (0, 1, 2 or 4)
     //    cout << "2 " << orien << endl;
-   // return 1;
+    return 1;
   }
 }
