@@ -1,3 +1,5 @@
+#pragma GCC optimize (3)
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -7,6 +9,30 @@
 //#include <random>
 
 using namespace std;
+
+template<class T>
+class list_optim
+{
+public:
+  list_optim():index(0){}
+
+  inline int size() const {return index;}
+
+  inline void push_back(T e)
+  {
+    
+    if(index >= 20) throw string("heuuu sup 20");
+    tab[index++] = e;
+  }
+
+  inline const T& get_elem(int i) const
+  {
+    return tab[i];
+  }
+private:
+  int index;
+  T tab[20];
+};
 
 struct pair_g
 {
@@ -303,6 +329,8 @@ public:
   {
     group_info(short nb,short c,short vc):num_block(nb),color(c),visited_code(vc){}
 
+     group_info():num_block(0),color(0),visited_code(0){}
+    
     int compute_bonus_group() const
     {
       if(num_block <= 10)
@@ -316,10 +344,12 @@ public:
     short int visited_code;
   };  
 
+
+  
   bool search_and_update_one_step(grid &g,int step_number,int *score)  const //true if a group is found
   {
-    std::list<group_info> lgi;
-
+    //    std::list<group_info> lgi;
+    list_optim<group_info> lgi;
     short visited[12][6] = {0};
     int visited_code = 0; //unique code for each visited
     
@@ -350,8 +380,10 @@ public:
 	for(int i=0;i<12;++i)
 	  for(int j=0;j<6;++j)
 	    {
-	      for(const group_info& gi:lgi)
+	      //for(const group_info& gi:lgi)
+	      for(int x=0;x<lgi.size();++x)
 		{
+		  const group_info &gi = lgi.get_elem(x);
 		  if(visited[i][j] == gi.visited_code)
 		    {
 		      if(i+1 < 12 && g.g_raw[i+1][j] == 0)  visited[i+1][j] = gi.visited_code;
@@ -372,8 +404,10 @@ public:
 	int bonus_group = 0;
 	const int COL_MAX = 10;
 	int color[COL_MAX] = {0}; //10 color max ?
-	for(const group_info&gi:lgi)
+	//	for(const group_info&gi:lgi)
+	  for(int x=0;x<lgi.size();++x)
 	  {
+	    const group_info &gi = lgi.get_elem(x);
 	    nb_block += gi.num_block;
 	    color[gi.color] = 1;
 	    bonus_group += gi.compute_bonus_group();
@@ -543,7 +577,7 @@ int main()
 			  1,
 			  1);
 
-    int max_d = 3;
+    int max_d = 4;
     int max_d_al = 8;
 
     cerr << "ene skull " << (float)max_score / (float)70 << endl;
