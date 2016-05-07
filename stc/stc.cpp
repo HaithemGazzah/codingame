@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <list>
+//#include <random>
 
 using namespace std;
 
@@ -81,11 +82,32 @@ public:
 			 int max_depth_aleat)  //return une colonne et une orientation pour le 0th truc qui arrive
   {
 
-    if(depth == max_depth)
+    //    if(depth == max_depth)
+    if(depth == max_depth_aleat)
       return;
+
+
+  
+    int min_i,max_i,min_j,max_j; //big bricolage...
+
+    if(depth < max_depth)
+      {
+	min_i = 0;
+	max_i = 4;
+	min_j = 0;
+	max_j = 6;
+      }
+    else
+      {
+	min_i = rand() % 4;
+	max_i = min_i + 1;
+
+	min_j = rand() % 6;
+	max_j=min_j + 1;
+      }
     
-    for(int i=0;i<4;++i)
-      for(int j=0;j<6;++j)
+    for(int i=min_i;i<max_i;++i)
+      for(int j=min_j;j<max_j;++j)
 	{
 	  if(j == 5 && i == 0) continue ;
 	  if(j == 0 && i == 2) continue; //bad orientation / line
@@ -148,6 +170,8 @@ public:
     //grid grid_tmp = *this;
 
     int top,topA,topB;
+    *score = 0;
+
     switch(orientation)
       {
       case 0:
@@ -164,8 +188,10 @@ public:
 
 	--(grid_tmp.top_col[col+1]);
 	--(grid_tmp.top_col[col]);
+
+	*score += min(grid_tmp.top_col[col],grid_tmp.top_col[col+1]);
+
 	
-	//	cerr << "toa " << topA << " toB " << topB << endl;
 	break;
       
       case 1:
@@ -175,6 +201,8 @@ public:
 	grid_tmp.g_raw[top-1][col] = pg.cb;
 
 	grid_tmp.top_col[col] -= 2;
+
+	*score +=grid_tmp.top_col[col];
 	
 	break;
       case 2:
@@ -188,7 +216,8 @@ public:
       
 	--(grid_tmp.top_col[col-1]);
 	--(grid_tmp.top_col[col]);
-	
+
+	*score += min(grid_tmp.top_col[col],grid_tmp.top_col[col-1]);
 	break;
       case 3:
 	top = find_top_col(grid_tmp,col);
@@ -197,13 +226,14 @@ public:
 	grid_tmp.g_raw[top-1][col] = pg.ca;
 
 	grid_tmp.top_col[col] -= 2;
+	*score += grid_tmp.top_col[col];
 	break;
 	
       }
 
-
+    //  *score *= 100;
     //    cerr << "bef ful scor comp " << endl;
-    *score =  full_score_computation_and_update(grid_tmp);
+    *score +=  full_score_computation_and_update(grid_tmp);
    
    //grid_tmp.print_grid();
    
@@ -243,8 +273,7 @@ public:
     return nb_block;
   }
 
-
-
+ 
   int full_score_computation_and_update(grid &g) const
   {
     bool found;
@@ -308,6 +337,9 @@ public:
 	    {
 	      lgi.push_back(group_info(block_found,color,visited_code));
 	      //   cerr << "block found ! " << endl;
+	      //on destroy aussi les element a 0 a coté
+	      
+	      
 	    }
 	  
 	}
@@ -322,6 +354,8 @@ public:
 		{
 		  if(visited[i][j] == gi.visited_code)
 		    {
+		      if(i+1 < 12 && g.g_raw[i+1][j] == 0)  visited[i+1][j] = gi.visited_code;
+		      if(j+1 < 6 && g.g_raw[i][j+1] == 0)  visited[i][j+1] = gi.visited_code;
 		      //cerr << "on erase " << i << " , " << j << endl;
 		      erase_one_elt(g,i,j);
 		      break;
@@ -380,7 +414,10 @@ public:
 
 	//--- chain power
 	//	cerr << " nb vblock " << nb_block << endl;
-	int chain_power = step_number*8*2;
+
+	int chain_power = 0;
+	if(step_number > 0) chain_power = pow(2,step_number + 2);
+
 
 	int score_partial = chain_power + bonus_color + bonus_group;
 	if(score_partial > 999)  score_partial = 999;
@@ -389,6 +426,10 @@ public:
 	//cerr << "part " << score_partial << endl;
 	
 	*score = 10*nb_block * (score_partial);
+
+
+	//== ******compmute some bonnus and malus heuristique
+
 	return true;
       }
     else //on a rien trouver, pas de score et false
@@ -455,6 +496,8 @@ private:
  **/
 int main()
 {
+  srand (time(NULL));
+    
   int rot=0;
   // game loop
   while (1) {                      
@@ -485,6 +528,34 @@ int main()
     max_score = 0;
     col = 0;
     orientation = 0;
+
+    //-- eval adversaire
+
+    
+    g_adv.evaluate_position(pbl,
+			  g_adv,
+			  0,
+			  &max_score,
+			  &col,
+			  &orientation,
+			  0,
+			  0,
+			  1,
+			  1);
+
+    int max_d = 3;
+    int max_d_al = 8;
+
+    cerr << "ene skull " << (float)max_score / (float)70 << endl;
+	
+    if((float)max_score / (float)70 >=6)
+      {
+	//on contre
+	max_d = 1;
+	max_d_al = 1;
+      }
+    
+    max_score = 0;
     g_m.evaluate_position(pbl,
 			  g_m,
 			  0,
@@ -493,8 +564,8 @@ int main()
 			  &orientation,
 			  0,
 			  0,
-			  3,
-			  7);
+			  max_d,
+			  max_d_al);
     
     cerr << "col " << col << " or " << orientation << " for value " << max_score << endl;
     // Write an action using cout. DON'T FORGET THE "<< endl"
