@@ -10,6 +10,100 @@
 
 using namespace std;
 
+
+
+struct coord_b
+{
+  coord_b():line(-2),orient(-2){}
+  coord_b(short line_,short orient_):line(line_),orient(orient_){}
+  short line,orient;
+};
+
+ostream& operator<<(ostream& os, const coord_b& c)
+{
+  os << "(" << c.line << "," << c.orient << ")";
+  return os;
+}
+
+class matrix_score
+{
+public:
+
+
+  inline int get_max_score(int line) const
+  {
+    return max_score[line];
+  }
+
+
+  int search_depth_n_skul(int skul_min) const
+  {
+    for(int i=0;i<8;++i)
+      {
+	if((float)max_score[i]/(float)70 >= skul_min)
+	  return i;
+      }
+    return 7; //ok on a le temps !
+    
+  }
+
+  coord_b search_coord_max_dep(int max_depth)
+  {
+
+    for(int i=max_depth;i>=0;--i)
+      {
+	if(matrix_max[0][i].line != -2)
+	  return matrix_max[0][i];
+      }
+    throw string("euhhh search coordmax");
+  }
+
+
+  int search_max_good_score(int min_score)
+  {
+    int score = 0;
+    int max = 0;
+    int max_dept = 0;
+    for(int i=0;i<8;++i)
+      {
+	score += max_score[i];
+	if(score >= min_score)
+	  return i;
+
+	if(score > max)
+	  {
+	    max = score;
+	    max_dept = i;
+	  }
+      }
+
+    return max_dept;
+  }
+  
+    
+  void print() const
+  {
+    for(int i=0;i<8;++i)
+      cerr << max_score[i] << ",";
+
+    cerr << endl;
+    for(int i=0;i<8;++i)
+      {
+	for(int j=0;j<8;++j)
+	  {
+	    cerr << matrix_max[j][i] << " ";
+	  }
+	cerr << endl;
+      }
+  }
+  //private:
+  int max_score[8] = {-1,-1,-1,-1,-1,-1,-1,-1}; //max score per depth
+  coord_b matrix_max[8][8];
+  coord_b current_line[8];
+ 
+};
+
+
 template<class T>
 class list_optim
 {
@@ -18,7 +112,7 @@ public:
 
   inline int size() const {return index;}
 
-  inline void push_back(T e)
+  inline void push_back(const T &e)
   {
     
     if(index >= 20) throw string("heuuu sup 20");
@@ -99,11 +193,8 @@ public:
   void evaluate_position(const planed_block& pb,
 			 const grid& g,
 			 int depth,
-			 int *max_score,
-			 int *col,
-			 int *orientation,
-			 int depth_0_col,
-			 int depth_0_orient,
+			 matrix_score &ms,
+			 int chain_score,
 			 int max_depth,
 			 int max_depth_aleat)  //return une colonne et une orientation pour le 0th truc qui arrive
   {
@@ -145,12 +236,6 @@ public:
 	  grid step_grid = g;
 	  int score;
 
-	  if(depth == 0)
-	    {
-	      depth_0_col = j;
-	      depth_0_orient = i;
-	      
-	    }
 
 	  //  	  cerr << " GRID AVANT"<< endl;
 	  //step_grid.print_grid();
@@ -164,24 +249,31 @@ public:
 	  //step_grid.print_grid();
 	  
 	  //  cerr << " SCORE " << score << " " << pb.pb[depth].ca << ", " << pb.pb[depth].cb << " col " << j << " or " << i << endl;
-	  
+	  ms.current_line[depth] = coord_b(j,i);
+	 
 
-	  if(score > *max_score)
+	  if(score /*+ chain_score*/ > ms.get_max_score(depth))
 	    {
-	      *max_score = score;
-	      *col = depth_0_col;
-	      *orientation = depth_0_orient;
-
+	    
+	      //ok c'est le score de la depth
+	      ms.max_score[depth] = /*chain_score +*/ score;
+	      
+	      ms.matrix_max[depth][depth] = coord_b(j,i);
+	      //on copie
+	      for(int xx=0;xx<depth;++xx)
+		{
+		  ms.matrix_max[xx][depth] = ms.current_line[xx];
+		}
 	    }
+
+
+
 
 	  evaluate_position(pb,
 			    step_grid,
 			    depth + 1,
-			    max_score,
-			    col,
-			    orientation,
-			    depth_0_col,
-			    depth_0_orient,
+			    ms,
+			    /*chain_score +*/ score,
 			    max_depth,
 			    max_depth_aleat);
 	}
@@ -259,7 +351,7 @@ public:
 
     //  *score *= 100;
     //    cerr << "bef ful scor comp " << endl;
-    *score +=  full_score_computation_and_update(grid_tmp);
+    *score =  full_score_computation_and_update(grid_tmp);
    
    //grid_tmp.print_grid();
    
@@ -269,11 +361,7 @@ public:
 
 
 
-  struct coord_b
-  {
-    coord_b(short line_,short col_):line(line_),col(col_){}
-    short line,col;
-  };
+ 
   
   int search_rec(const grid& g,short color,short line,short col, short visited[12][6],int visited_code) const
   {
@@ -476,7 +564,7 @@ public:
   }
 
   
-  void erase_one_elt(grid& g,short col,short line) const //on erase l'element qui est en coord c
+  inline void erase_one_elt(grid& g,short col,short line) const //on erase l'element qui est en coord c
   {
     for(int i=col;i>0;--i)
       {
@@ -486,7 +574,7 @@ public:
       }
   }
 
-  int find_top_col(const grid &g,int col) const
+  inline int find_top_col(const grid &g,int col) const
   {
     return g.top_col[col];
   }
@@ -532,7 +620,7 @@ int main()
 {
   srand (time(NULL));
     
-  int rot=0;
+  //int rot=0;
   // game loop
   while (1) {                      
     planed_block pbl(cin);
@@ -554,54 +642,62 @@ int main()
 
 
     return 0;*/
-   int orien = (int)((rot++)%4);
+    //   int orien = (int)((rot++)%4);
     //g_m.create_new_grid(pbl.pb[0],orien,2);
 
 
-    int max_score,col,orientation;
-    max_score = 0;
-    col = 0;
-    orientation = 0;
+    matrix_score ms_m,ms_adv;
+    
 
+    cerr << ms_m.get_max_score(1) << endl;
     //-- eval adversaire
 
     
     g_adv.evaluate_position(pbl,
-			  g_adv,
-			  0,
-			  &max_score,
-			  &col,
-			  &orientation,
-			  0,
-			  0,
-			  1,
-			  1);
+			    g_adv,
+			    0,
+			    ms_adv,
+			    0,
+			    2,
+			    6);
 
-    int max_d = 4;
-    int max_d_al = 8;
 
-    cerr << "ene skull " << (float)max_score / (float)70 << endl;
-	
-    if((float)max_score / (float)70 >=6)
-      {
-	//on contre
-	max_d = 1;
-	max_d_al = 1;
-      }
+    ms_adv.print();
+    cerr << "===================" << endl;
+
     
-    max_score = 0;
+  
     g_m.evaluate_position(pbl,
 			  g_m,
 			  0,
-			  &max_score,
-			  &col,
-			  &orientation,
+			  ms_m,
 			  0,
-			  0,
-			  max_d,
-			  max_d_al);
+			  3,
+			  8);
+
+
+    ms_m.print();
+
+    int next_depth = ms_adv.search_depth_n_skul(18);
+
+   // if(next_depth == 0) next_depth = 1;
+
+  
+   int d;
+   if(next_depth <= 3)
+     {
+       d = ms_m.search_max_good_score(70*7); //6 skul
+     }
+   else
+     {
+       d = ms_m.search_max_good_score(70*12); 
+     }
+   coord_b ct = ms_m.search_coord_max_dep(d);
+   int col = ct.line;
+   int orientation = ct.orient;
     
-    cerr << "col " << col << " or " << orientation << " for value " << max_score << endl;
+    
+    //  cerr << "col " << col << " or " << orientation << " for value " << max_score << endl;
     // Write an action using cout. DON'T FORGET THE "<< endl"
     // To debug: cerr << "Debug messages..." << endl;
 
