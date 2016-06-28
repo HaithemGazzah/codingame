@@ -21,6 +21,24 @@ Enti = namedtuple('Enti', ['id', 'coord', 'type','state','val'])
 
 #classes which defines action to perform
 
+class ReturnHome:
+    def __init__(self,agent_,home_):
+        self.home = home_
+        self.agent = agent_
+        self.done = False
+        
+    def perform_action(self):
+        print("RETURN HOME",file=sys.stderr)
+
+        if dist(self.agent.bust.coord,self.home) <= 1600:
+            print("RELEASE")
+            self.done = True
+        else:
+            print_move(self.home)
+        
+        
+
+
 class ExploreMap:
     def __init__(self,agent_,map_explor_):
         self.mx = map_explor_
@@ -28,6 +46,7 @@ class ExploreMap:
         self.done = False
         
     def perform_action(self):
+        print("ACTION EXPLOR MAP",file=sys.stderr)
         mc = self.mx.default_coord(self.agent.bust.coord)
         print_move(mc)
         self.done = True
@@ -40,6 +59,7 @@ class TakePhantom:
         self.done = False
         
     def perform_action(self):
+        print("ACTION TAKE PHAN",file=sys.stderr)
         bust = self.agent.bust
         phan = self.agent.view_ents['phan'][self.phan_id]
         dist_b_p = dist(bust.coord,phan.coord)
@@ -59,6 +79,7 @@ class StunOpo:
         self.done = False
         
     def perform_action(self):
+        print("ACTION STUN",file=sys.stderr)
         bust = self.agent.bust
         opo = self.agent.view_ents['opo'][self.opo_id]
         dist_b_p = dist(bust.coord,opo.coord)
@@ -104,9 +125,10 @@ class Plateform_system:
                         ag.view_ents['opo'][e.id] = e
             
 class Agent:
-    def __init__(self,map_ex_,pf_,play_id_):
+    def __init__(self,map_ex_,pf_,play_id_,home_coord_):
         self.pf = pf_
         self.map_ex = map_ex_
+        self.home_coord = home_coord_
         self.play_id = play_id_
         self.pf.connect_agent(self)
         self.queue = deque()
@@ -127,17 +149,22 @@ class Agent:
     def prepare_action(self):
         #update the action (if done, 0)
         if self.action_planed != 0 and self.action_planed.done:
-            self.action_planned = 0
+            self.action_planed = 0
             
         #first take message
         msg = 0
+        print("prepare actio",file=sys.stderr)
         try:
             msg = self.get_avail_msg()
         except IndexError:
             #no message, try to choose an action if no action are planned
             if self.action_planed == 0:
                 #we need to find an action
-                if self.view_ents['phan']: #ok not empty, take phantom
+                print("action0",self.view_ents,file=sys.stderr)
+                if self.bust.state == 1: #transport phantom
+                    self.action_planed = ReturnHome(self,self.home_coord)
+                elif self.view_ents['phan']: #ok not empty, take phantom
+                    print("on prend phan",file=sys.stderr)
                     for phan_id in self.view_ents['phan']:
                         self.action_planed = TakePhantom(self,phan_id)
                         break
@@ -226,15 +253,19 @@ map_ex = Map_explore(my_team_id)
 
 
 pls = Plateform_system(busters_per_player,my_team_id)
-#if team_id = 0 -> player id begins at 0, else begin at play 
-agents = [Agent(map_ex,pls,busters_per_player*my_team_id + x) for x in range(busters_per_player)]
 
-
-# game loop
 base = (0,0)
 
 if my_team_id == 1:
     base = (16000,9000)
+
+    
+#if team_id = 0 -> player id begins at 0, else begin at play 
+agents = [Agent(map_ex,pls,busters_per_player*my_team_id + x,base) for x in range(busters_per_player)]
+
+
+# game loop
+
 
     
 
