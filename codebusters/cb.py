@@ -61,14 +61,20 @@ class TakePhantom:
     def perform_action(self):
         print("ACTION TAKE PHAN",file=sys.stderr)
         bust = self.agent.bust
-        phan = self.agent.view_ents['phan'][self.phan_id]
-        dist_b_p = dist(bust.coord,phan.coord)
-        if dist_b_p < 1760 and dist_b_p > 900:
-            print("BUST " + str(phan.id))
-            self.done = True
+        if self.phan_id in self.agent.view_ents['phan']:
+            phan = self.agent.view_ents['phan'][self.phan_id]
+            dist_b_p = dist(bust.coord,phan.coord)
+            if dist_b_p < 1760 and dist_b_p > 900:
+                print("BUST " + str(phan.id))
+                self.done = True
+            else:
+                #on sapproche
+                print_move(phan.coord)
+                            
         else:
-            #on sapproche
-            print_move(phan.coord)
+            #on a perdu le phantome
+            print_move((0,0))
+            self.done = True
 
 
 class StunOpo:
@@ -86,6 +92,7 @@ class StunOpo:
         if dist_b_p < 1760:
             print("STUN " + str(opo.id))
             self.done = True
+            self.agent.last_stun = self.agent.round_num
         else:
             #on sapproche
             print_move(opo.coord)
@@ -104,14 +111,14 @@ class Plateform_system:
         for ag in self.agent:
             ag.queue.append(msg)
 
-    def update_entities(self,en_l):
+    def update_entities(self,en_l,round_num_):
         #first update the status of the bust
         for e in en_l:
             if e.type == self.team_id:
                 self.agents[e.id].bust = e
                 self.agents[e.id].view_ents['phan'] = {}
                 self.agents[e.id].view_ents['opo'] = {}
-
+                self.agents[e.id].round_num = round_num_
         print(self.agents,file=sys.stderr)
         #now vievable object
         for e in en_l:
@@ -135,6 +142,9 @@ class Agent:
         self.view_ents = {'phan': {}, 'opo': {}}
         self.bust = 0
         self.action_planed = 0
+        self.round_num = 0
+        self.last_stun = -20
+
         
     def broadcast_msg(self,msg):
         self.pf.broadcast(msg)
@@ -168,7 +178,7 @@ class Agent:
                     for phan_id in self.view_ents['phan']:
                         self.action_planed = TakePhantom(self,phan_id)
                         break
-                elif self.view_ents['opo']: #ok not empty, bust enemi
+                elif self.last_stun + 20 <= self.round_num and self.view_ents['opo']: #ok not empty, bust enemi
                     for opo_id in self.view_ents['opo']:
                         self.action_planed = StunOpo(self,opo_id)
                         break
@@ -267,12 +277,13 @@ agents = [Agent(map_ex,pls,busters_per_player*my_team_id + x,base) for x in rang
 # game loop
 
 
-    
+round_num = 0  
 
 
 
     
 while True:
+    round_num += 1
     entities = int(input())  # the number of busters and ghosts visible to you
     enti = []
     
@@ -294,7 +305,7 @@ while True:
  
 
     
-    pls.update_entities(enti)
+    pls.update_entities(enti,round_num)
     map_ex.print_map()
 
 
