@@ -21,6 +21,18 @@ Enti = namedtuple('Enti', ['id', 'coord', 'type','state','val'])
 
 #classes which defines action to perform
 
+
+class WhenStunt:
+    def __init(self):
+        self.done = False
+        
+    def is_valid(self):
+        return True
+    
+    def perform_action(self):
+        print_move((0,0))
+        self.done = True
+        
 class ReturnHome:
     def __init__(self,agent_,home_):
         self.home = home_
@@ -90,7 +102,10 @@ class TakePhantom:
     def perform_action(self):
         print("ACTION TAKE PHAN",file=sys.stderr)
         bust = self.agent.bust
-        if self.phan_id in self.agent.view_ents['phan']:
+        
+        #if self.phan_id in self.agent.view_ents['phan']:
+        if self.agent.view_ents['phan']:
+            self.phan_id = min(self.agent.view_ents['phan'], key=lambda k: self.agent.view_ents['phan'][k].state) 
             phan = self.agent.view_ents['phan'][self.phan_id]
             dist_b_p = dist(bust.coord,phan.coord)
             if dist_b_p < 1760:# and dist_b_p > 900:
@@ -213,21 +228,27 @@ class Agent:
         except IndexError:
             #no message, try to choose an action if no action are planned
             if self.bust.state == 2: #assomé
-                self.action_planed = ReturnHome(self,self.home_coord) #anyway...
+                self.action_planed = WhenStunt() #anyway...
                 return True
+            
             elif self.action_planed == 0:
                 #we need to find an action
                 print("action0",self.view_ents,file=sys.stderr)
+                print(self.last_stun,self.round_num,self.view_ents['opo'],file=sys.stderr)
                 if self.bust.state == 1: #transport phantom
                     self.action_planed = ReturnHome(self,self.home_coord)
                 elif self.view_ents['phan']: #ok not empty, take phantom
-                    print("on prend phan",file=sys.stderr)
-                    for phan_id in self.view_ents['phan']:
-                        self.action_planed = TakePhantom(self,phan_id)
-                        break
+                    print("on prend phan MIN",file=sys.stderr)
+                    phan_id = min(self.view_ents['phan'], key=lambda k: self.view_ents['phan'][k].state) 
+                    #for phan_id in self.view_ents['phan']:
+                    self.action_planed = TakePhantom(self,phan_id)
+                    #    break
                 elif self.last_stun + 20 <= self.round_num and self.view_ents['opo']: #ok not empty, bust enemi
+                    print("on va stuné ! ",file=sys.stderr)
                     for opo_id in self.view_ents['opo']:
                         if self.view_ents['opo'][opo_id].state == 1: #have phantom
+                            self.action_planed = StunOpo(self,opo_id)
+                        elif self.view_ents['opo'][opo_id].state == 3: #vise, priorité donc
                             self.action_planed = StunOpo(self,opo_id)
                             break
                         else:
