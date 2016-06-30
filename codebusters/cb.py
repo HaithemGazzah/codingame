@@ -10,7 +10,7 @@ def move_v(c):
 
 
 def print_move(c):
-    print("MOVE " + str(c[0]) + " " + str(c[1]))
+    print("MOVE " + str(int(c[0])) + " " + str(int(c[1])))
 
 def dist(c1,c2):
     return int(math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2))
@@ -26,13 +26,28 @@ class ReturnHome:
         self.home = home_
         self.agent = agent_
         self.done = False
-        
+
+    def is_valid(self):
+        return self.agent.bust.state == 1 #plus de phan
+           
     def perform_action(self):
         print("RETURN HOME",file=sys.stderr)
 
         if dist(self.agent.bust.coord,self.home) <= 1600:
             print("RELEASE")
             self.done = True
+        elif self.agent.last_stun + 20 <= self.agent.round_num and self.agent.view_ents['opo']: #if on voit un mechant
+            # Attaque !
+            print("STUNT BRICOL",file=sys.stderr)
+            found = False
+            for opo_id in self.agent.view_ents['opo']:
+                #opo_id = next (iter (self.agent.view_ents['opo'].keys()))
+                if  self.agent.view_ents['opo'][opo_id].state == 0 and dist(self.agent.view_ents['opo'][opo_id].coord,self.agent.bust.coord) <= 1760:
+                    self.agent.action_planed = StunOpo(self.agent,opo_id)
+                    self.agent.action_planed.perform_action()
+                    found = True
+                    break
+            if not found: print_move(self.home)
         else:
             print_move(self.home)
         
@@ -44,11 +59,22 @@ class ExploreMap:
         self.mx = map_explor_
         self.agent = agent_
         self.done = False
-        
+
+    def is_valid(self):
+        return True
+           
     def perform_action(self):
-        print("ACTION EXPLOR MAP",file=sys.stderr)
-        mc = self.mx.default_coord(self.agent.bust.coord)
-        print_move(mc)
+        print("ACTION EXPLOR MAP",self.agent.round_num,file=sys.stderr)
+        if self.agent.round_num > 100:
+            print("GO OPPO",file=sys.stderr)
+            if self.agent.pf.team_id == 0:
+                 print_move((13000,7000))
+            else:
+                 print_move((2300,2000))
+        else:
+            mc = self.mx.default_coord(self.agent.bust.coord)
+            print_move(mc)
+            
         self.done = True
         
 class TakePhantom:
@@ -57,16 +83,30 @@ class TakePhantom:
         self.agent = agent_
         self.phan_id = phanid_
         self.done = False
-        
+
+    def is_valid(self):
+        return True
+    
     def perform_action(self):
         print("ACTION TAKE PHAN",file=sys.stderr)
         bust = self.agent.bust
         if self.phan_id in self.agent.view_ents['phan']:
             phan = self.agent.view_ents['phan'][self.phan_id]
             dist_b_p = dist(bust.coord,phan.coord)
-            if dist_b_p < 1760 and dist_b_p > 900:
-                print("BUST " + str(phan.id))
-                self.done = True
+            if dist_b_p < 1760:# and dist_b_p > 900:
+                if dist_b_p > 900:
+                    print("BUST " + str(phan.id))
+                    if self.agent.view_ents['phan'][self.phan_id].state == 1:
+                        self.done = True
+                else: #on s'eloigne, direction home de preference !
+                    print("ELOIGNE ",file=sys.stderr)
+                    dist_home = dist(self.agent.home_coord,phan.coord)
+                    vx = self.agent.home_coord[0] - phan.coord[0]
+                    vy = self.agent.home_coord[1] - phan.coord[1]
+
+                    vx_new = vx/dist_home*1000
+                    vy_new = vy/dist_home*1000
+                    print_move((phan.coord[0] +vx_new, phan.coord[1] +vy_new))
             else:
                 #on sapproche
                 print_move(phan.coord)
@@ -83,7 +123,10 @@ class StunOpo:
         self.agent = agent_
         self.opo_id = opoid_
         self.done = False
-        
+
+    def is_valid(self):
+        return True
+
     def perform_action(self):
         print("ACTION STUN",file=sys.stderr)
         bust = self.agent.bust
@@ -158,9 +201,10 @@ class Agent:
 
     def prepare_action(self):
         #update the action (if done, 0)
-        if self.action_planed != 0 and self.action_planed.done:
+        if self.action_planed != 0 and (self.action_planed.done or not self.action_planed.is_valid()):
             self.action_planed = 0
-            
+
+
         #first take message
         msg = 0
         print("prepare actio",file=sys.stderr)
@@ -168,7 +212,10 @@ class Agent:
             msg = self.get_avail_msg()
         except IndexError:
             #no message, try to choose an action if no action are planned
-            if self.action_planed == 0:
+            if self.bust.state == 2: #assomé
+                self.action_planed = ReturnHome(self,self.home_coord) #anyway...
+                return True
+            elif self.action_planed == 0:
                 #we need to find an action
                 print("action0",self.view_ents,file=sys.stderr)
                 if self.bust.state == 1: #transport phantom
@@ -180,8 +227,11 @@ class Agent:
                         break
                 elif self.last_stun + 20 <= self.round_num and self.view_ents['opo']: #ok not empty, bust enemi
                     for opo_id in self.view_ents['opo']:
-                        self.action_planed = StunOpo(self,opo_id)
-                        break
+                        if self.view_ents['opo'][opo_id].state == 1: #have phantom
+                            self.action_planed = StunOpo(self,opo_id)
+                            break
+                        else:
+                            self.action_planed = ExploreMap(self,self.map_ex)
                 else: #on se balade
                     self.action_planed = ExploreMap(self,self.map_ex)
                     
@@ -199,6 +249,8 @@ class Agent:
         
 class Map_explore:
     def __init__(self,team_id):
+
+        self.tid = team_id
         self.map =   [{'explor':0,'num_phan':0,'num_bust':0}  for x in range(8*5)]
         if team_id == 0:
             self.map[0] = {'explor':1,'num_phan':0,'num_bust':0} 
@@ -246,7 +298,10 @@ class Map_explore:
                    
         #if zon_phan != -1: return zon_phan
         if zon_empt != -1: return zon_empt
-        return (0,0)
+        if tid == 1:
+            return (14000,8000)
+        else:
+            return (2000,1000)
         #raise Exception('Heuuuuu')
         
         
