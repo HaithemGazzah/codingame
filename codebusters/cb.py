@@ -16,14 +16,30 @@ def dist(c1,c2):
     return int(math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2))
 
 
+Msg_base = namedtuple('Msg',['type','coord'])
+
+
 Enti = namedtuple('Enti', ['id', 'coord', 'type','state','val'])
 #Status = namedtuple('Status_map', ['explor', 'num_phan', 'num_bust'])
 
 #classes which defines action to perform
 
+class HelpBust:
+    def __init__(self,agent_,coord_):
+        self.done = False
+        self.agent = agent_
+        self.coord = coord_
+        
+    def is_valid(self):
+        return True
+    
+    def perform_action(self):
+        print("HELP !!",file=sys.stderr)
+        print_move(self.coord)
+        self.done = True
 
 class WhenStunt:
-    def __init(self):
+    def __init__(self):
         self.done = False
         
     def is_valid(self):
@@ -97,7 +113,11 @@ class TakePhantom:
         self.done = False
 
     def is_valid(self):
-        return True
+        return self.phan_id in self.agent.view_ents['phan']
+
+
+
+
     
     def perform_action(self):
         print("ACTION TAKE PHAN",file=sys.stderr)
@@ -107,6 +127,12 @@ class TakePhantom:
         if self.agent.view_ents['phan']:
             self.phan_id = min(self.agent.view_ents['phan'], key=lambda k: self.agent.view_ents['phan'][k].state) 
             phan = self.agent.view_ents['phan'][self.phan_id]
+
+            if phan.state == 0:
+                #need help !
+                print("NEED HELP !!",file=sys.stderr)
+                self.agent.broadcast_msg(Msg_base("HELP",phan.coord))
+                
             dist_b_p = dist(bust.coord,phan.coord)
             if dist_b_p < 1760:# and dist_b_p > 900:
                 if dist_b_p > 900:
@@ -128,6 +154,7 @@ class TakePhantom:
                             
         else:
             #on a perdu le phantome
+            print("NIMPE ",file=sys.stderr)
             print_move((0,0))
             self.done = True
 
@@ -166,8 +193,8 @@ class Plateform_system:
         self.agents[ag_.play_id] = ag_
 
     def broadcast_msg(self,msg):
-        for ag in self.agent:
-            ag.queue.append(msg)
+        for ag in self.agents:
+            self.agents[ag].queue.append(msg)
 
     def update_entities(self,en_l,round_num_):
         #first update the status of the bust
@@ -205,14 +232,20 @@ class Agent:
 
         
     def broadcast_msg(self,msg):
-        self.pf.broadcast(msg)
+        self.pf.broadcast_msg(msg)
 
     def send_msg(self,msg,bot_id):
         bot_id.append(msg)
 
         
     def get_avail_msg(self):
-        return self.queue.pop()
+        ret = 0
+        try:
+            ret = self.queue.pop()
+        except IndexError:
+            return False
+        else:
+            return ret
 
     def prepare_action(self):
         #update the action (if done, 0)
@@ -221,48 +254,49 @@ class Agent:
 
 
         #first take message
-        msg = 0
+        
         print("prepare actio",file=sys.stderr)
-        try:
-            msg = self.get_avail_msg()
-        except IndexError:
-            #no message, try to choose an action if no action are planned
-            if self.bust.state == 2: #assomé
-                self.action_planed = WhenStunt() #anyway...
-                return True
+ 
+        msg = self.get_avail_msg()
+ 
+        #no message, try to choose an action if no action are planned
+        if self.bust.state == 2: #assomé
+            self.action_planed = WhenStunt() #anyway...
+            return True
             
-            elif self.action_planed == 0:
-                #we need to find an action
-                print("action0",self.view_ents,file=sys.stderr)
-                print(self.last_stun,self.round_num,self.view_ents['opo'],file=sys.stderr)
-                if self.bust.state == 1: #transport phantom
-                    self.action_planed = ReturnHome(self,self.home_coord)
-                elif self.view_ents['phan']: #ok not empty, take phantom
-                    print("on prend phan MIN",file=sys.stderr)
-                    phan_id = min(self.view_ents['phan'], key=lambda k: self.view_ents['phan'][k].state) 
-                    #for phan_id in self.view_ents['phan']:
-                    self.action_planed = TakePhantom(self,phan_id)
-                    #    break
-                elif self.last_stun + 20 <= self.round_num and self.view_ents['opo']: #ok not empty, bust enemi
-                    print("on va stuné ! ",file=sys.stderr)
-                    for opo_id in self.view_ents['opo']:
-                        if self.view_ents['opo'][opo_id].state == 1: #have phantom
-                            self.action_planed = StunOpo(self,opo_id)
-                        elif self.view_ents['opo'][opo_id].state == 3: #vise, priorité donc
-                            self.action_planed = StunOpo(self,opo_id)
-                            break
-                        else:
-                            self.action_planed = ExploreMap(self,self.map_ex)
-                else: #on se balade
-                    self.action_planed = ExploreMap(self,self.map_ex)
-                    
-                return True
-            else:
-                return True
-
+        elif self.action_planed == 0:
+            #we need to find an action
+            print("action0",self.view_ents,file=sys.stderr)
+            print(self.last_stun,self.round_num,self.view_ents['opo'],file=sys.stderr)
+            if self.bust.state == 1: #transport phantom
+                self.action_planed = ReturnHome(self,self.home_coord)
+            elif self.view_ents['phan']: #ok not empty, take phantom
+                print("on prend phan MIN",file=sys.stderr)
+                phan_id = min(self.view_ents['phan'], key=lambda k: self.view_ents['phan'][k].state) 
+                #for phan_id in self.view_ents['phan']:
+                self.action_planed = TakePhantom(self,phan_id)
+                #    break
+            elif msg and msg.type == "HELP":
+                print("**on repond au HELP",file=sys.stderr)
+                self.action_planed = HelpBust(self,msg.coord)
+            elif self.last_stun + 20 <= self.round_num and self.view_ents['opo']: #ok not empty, bust enemi
+                print("on va stuné ! ",file=sys.stderr)
+                for opo_id in self.view_ents['opo']:
+                    if self.view_ents['opo'][opo_id].state == 1: #have phantom
+                        self.action_planed = StunOpo(self,opo_id)
+                    elif self.view_ents['opo'][opo_id].state == 3: #vise, priorité donc
+                        self.action_planed = StunOpo(self,opo_id)
+                        break
+                    else:
+                        self.action_planed = ExploreMap(self,self.map_ex)
+            else: #on se balade
+                self.action_planed = ExploreMap(self,self.map_ex)
+                 
+            return True
         else:
-            return False
+            return True
 
+ 
 
     def print_action(self):
         self.action_planed.perform_action()
