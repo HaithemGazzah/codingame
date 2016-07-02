@@ -16,7 +16,7 @@ def dist(c1,c2):
     return int(math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2))
 
 
-Msg_base = namedtuple('Msg',['type','coord'])
+Msg_base = namedtuple('Msg',['type','phan'])
 
 
 Enti = namedtuple('Enti', ['id', 'coord', 'type','state','val'])
@@ -24,19 +24,54 @@ Enti = namedtuple('Enti', ['id', 'coord', 'type','state','val'])
 
 #classes which defines action to perform
 
-class HelpBust:
-    def __init__(self,agent_,coord_):
+
+class GoCenter:
+    def __init__(self):
         self.done = False
-        self.agent = agent_
-        self.coord = coord_
+     
         
     def is_valid(self):
         return True
     
     def perform_action(self):
-        print("HELP !!",file=sys.stderr)
-        print_move(self.coord)
+       
+        print_move((8000,4500))
         self.done = True
+        
+
+
+class HelpBust:
+    def __init__(self,agent_,msg_):
+        self.done = False
+        self.agent = agent_
+        self.msg = msg_
+      
+        
+    def is_valid(self):
+        return self.msg == self.agent.msg
+    
+    def perform_action(self):
+        print("HELP !!",file=sys.stderr)
+
+        if dist(self.agent.bust.coord,self.msg.phan.coord) < 10:
+            #ok sur zone
+            #action de base on chope phantome
+            self.agent.action_planed = TakePhantom(self.agent,self.msg.phan.id)
+
+            
+          
+
+            #mais on prefere stun
+            if self.agent.last_stun + 20 <= self.agent.round_num and self.agent.view_ents['opo']:
+                for opo_id in self.agent.view_ents['opo']:
+                     if  self.agent.view_ents['opo'][opo_id].state == 3:
+                          self.agent.action_planed = StunOpo(self.agent,opo_id)
+                          break
+            self.agent.action_planed.perform_action()
+            self.done = True      
+        else:
+            print_move(self.msg.phan.coord)
+      
 
 class WhenStunt:
     def __init__(self):
@@ -93,16 +128,17 @@ class ExploreMap:
            
     def perform_action(self):
         print("ACTION EXPLOR MAP",self.agent.round_num,file=sys.stderr)
+        mc = self.mx.default_coord(self.agent.bust.coord)
         if self.agent.round_num > 100:
             print("GO OPPO",file=sys.stderr)
             if self.agent.pf.team_id == 0:
                  print_move((13000,7000))
             else:
                  print_move((2300,2000))
+        elif self.agent.round_num < 10:
+            print_move(mc[2])
         else:
-            mc = self.mx.default_coord(self.agent.bust.coord)
-            print_move(mc)
-            
+            print_move(mc[0])
         self.done = True
         
 class TakePhantom:
@@ -131,7 +167,7 @@ class TakePhantom:
             if phan.state == 0:
                 #need help !
                 print("NEED HELP !!",file=sys.stderr)
-                self.agent.broadcast_msg(Msg_base("HELP",phan.coord))
+                self.agent.broadcast_msg(Msg_base("HELP",phan))
                 
             dist_b_p = dist(bust.coord,phan.coord)
             if dist_b_p < 1760:# and dist_b_p > 900:
@@ -187,13 +223,18 @@ class Plateform_system:
         self.num_agent = num_agent_
         self.team_id = team_id_
         self.agents = {}
+        self.first_found = False
 
 
     def connect_agent(self,ag_):
         self.agents[ag_.play_id] = ag_
+        if not self.first_found:
+           self.agents[ag_.play_id].first_bust = True
+           self.first_found = True
 
-    def broadcast_msg(self,msg):
+    def broadcast_msg(self,sender,msg):
         for ag in self.agents:
+            if self.agents[ag] is sender: continue
             self.agents[ag].queue.append(msg)
 
     def update_entities(self,en_l,round_num_):
@@ -222,17 +263,21 @@ class Agent:
         self.map_ex = map_ex_
         self.home_coord = home_coord_
         self.play_id = play_id_
-        self.pf.connect_agent(self)
+        
         self.queue = deque()
         self.view_ents = {'phan': {}, 'opo': {}}
         self.bust = 0
         self.action_planed = 0
         self.round_num = 0
         self.last_stun = -20
+        self.first_bust = False
 
+        self.msg = False #no msg
+        
+        self.pf.connect_agent(self)
         
     def broadcast_msg(self,msg):
-        self.pf.broadcast_msg(msg)
+        self.pf.broadcast_msg(self,msg)
 
     def send_msg(self,msg,bot_id):
         bot_id.append(msg)
@@ -249,6 +294,15 @@ class Agent:
 
     def prepare_action(self):
         #update the action (if done, 0)
+
+
+        self.msg = self.get_avail_msg()
+
+        
+        if  self.round_num <= 10:
+            self.action_planed = ExploreMap(self,self.map_ex)
+            return True
+
         if self.action_planed != 0 and (self.action_planed.done or not self.action_planed.is_valid()):
             self.action_planed = 0
 
@@ -257,7 +311,7 @@ class Agent:
         
         print("prepare actio",file=sys.stderr)
  
-        msg = self.get_avail_msg()
+        
  
         #no message, try to choose an action if no action are planned
         if self.bust.state == 2: #assomé
@@ -276,9 +330,9 @@ class Agent:
                 #for phan_id in self.view_ents['phan']:
                 self.action_planed = TakePhantom(self,phan_id)
                 #    break
-            elif msg and msg.type == "HELP":
+            elif self.msg and self.msg.type == "HELP":
                 print("**on repond au HELP",file=sys.stderr)
-                self.action_planed = HelpBust(self,msg.coord)
+                self.action_planed = HelpBust(self,self.msg)
             elif self.last_stun + 20 <= self.round_num and self.view_ents['opo']: #ok not empty, bust enemi
                 print("on va stuné ! ",file=sys.stderr)
                 for opo_id in self.view_ents['opo']:
@@ -306,14 +360,14 @@ class Map_explore:
     def __init__(self,team_id):
 
         self.tid = team_id
-        self.map =   [{'explor':0,'num_phan':0,'num_bust':0}  for x in range(8*5)]
+        self.map =   [{'explor':0,'num_phan':0,'num_bust':0,'list_phan':[]}  for x in range(8*5)]
         if team_id == 0:
-            self.map[0] = {'explor':1,'num_phan':0,'num_bust':0} 
+            self.map[0] = {'explor':1,'num_phan':0,'num_bust':0,'list_phan':[]} 
         #    self.map[1] = {'explor':1,'num_phan':0,'num_bust':0} 
         #    self.map[16] = {'explor':1,'num_phan':0,'num_bust':0} 
             
         else:
-            self.map[7*5] = {'explor':1,'num_phan':0,'num_bust':0} 
+            self.map[7*5] = {'explor':1,'num_phan':0,'num_bust':0,'list_phan':[]} 
         #    self.map[15*8-1] = {'explor':1,'num_phan':0,'num_bust':0} 
         #    self.map[14*8] = {'explor':1,'num_phan':0,'num_bust':0}
             
@@ -339,6 +393,9 @@ class Map_explore:
         zon_empt = -1
         min_phan = 999999
         zon_phan = -1
+
+        zon_phan_minimum = -1
+        min_phan_minimum = 999999
         
         for x in range(8):
             for y in range(5):
@@ -347,16 +404,31 @@ class Map_explore:
                 if self.coord2zone(zone_coord)['num_phan'] > 0 and distance < min_phan:
                    min_phan = distance
                    zon_phan = zone_coord
-                elif self.coord2zone(zone_coord)['explor'] == 0 and distance < min_empt:
+                if self.coord2zone(zone_coord)['explor'] == 0 and distance < min_empt:
                     min_empt = distance
                     zon_empt = zone_coord
-                   
-        #if zon_phan != -1: return zon_phan
-        if zon_empt != -1: return zon_empt
-        if tid == 1:
-            return (14000,8000)
-        else:
-            return (2000,1000)
+
+                if self.coord2zone(zone_coord)['list_phan'] and min(self.coord2zone(zone_coord)['list_phan']) < min_phan_minimum:
+                    min_phan_minimum = min(self.coord2zone(zone_coord)['list_phan'])
+                    zon_phan_minimum = zone_coord        
+
+        #if zon_phan != -1 and zon_empt != -1:
+        #    if min_phan > min_empt:
+        #        return zon_empt
+        #    else:
+        #        return zon_phan
+
+
+        return (zon_phan_minimum, zon_phan , zon_empt)
+    
+        #if zon_phan_minimum != -1: return zon_phan_minimum
+        #elif zon_phan != -1: return zon_phan
+        #elif zon_empt != -1: return zon_empt
+        #else:
+        #    if tid == 1:
+        #        return (14000,8000)
+        #    else:
+        #        return (2000,1000)
         #raise Exception('Heuuuuu')
         
         
@@ -404,11 +476,15 @@ while True:
         # state: For busters: 0=idle, 1=carrying a ghost.
         # value: For busters: Ghost id being carried. For ghosts: number of busters attempting to trap this ghost.
         entity_id, x, y, entity_type, state, value = [int(j) for j in input().split()]
-        enti.append(Enti(entity_id, (x, y), entity_type, state, value))
+        enti_add = Enti(entity_id, (x, y), entity_type, state, value)
+        enti.append(enti_add )
 
         #update zone
+        map_ex.coord2zone((x,y))['num_phan'] = 0
+        map_ex.coord2zone((x,y))['list_phan'] = []
         if entity_type == -1:
             map_ex.coord2zone((x,y))['num_phan'] += 1
+            map_ex.coord2zone((x,y))['list_phan'].append(state)
         if entity_type == my_team_id: #mon bus
             map_ex.coord2zone((x,y))['explor'] = 1 #on a explore
 
