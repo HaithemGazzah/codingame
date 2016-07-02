@@ -20,7 +20,7 @@ Msg_base = namedtuple('Msg',['type','phan'])
 
 
 Enti = namedtuple('Enti', ['id', 'coord', 'type','state','val'])
-#Status = namedtuple('Status_map', ['explor', 'num_phan', 'num_bust'])
+
 
 #classes which defines action to perform
 
@@ -129,16 +129,19 @@ class ExploreMap:
     def perform_action(self):
         print("ACTION EXPLOR MAP",self.agent.round_num,file=sys.stderr)
         mc = self.mx.default_coord(self.agent.bust.coord)
-        if self.agent.round_num > 100:
+        print(mc,file=sys.stderr)
+        if self.agent.round_num > 100 and mc[0] == -1:
             print("GO OPPO",file=sys.stderr)
             if self.agent.pf.team_id == 0:
                  print_move((13000,7000))
             else:
                  print_move((2300,2000))
-        elif self.agent.round_num < 10:
+        elif self.agent.round_num < 20:
             print_move(mc[2])
         else:
-            print_move(mc[0])
+            if mc[0] != -1: print_move(mc[0])
+            else: print_move(mc[2])
+            
         self.done = True
         
 class TakePhantom:
@@ -168,7 +171,17 @@ class TakePhantom:
                 #need help !
                 print("NEED HELP !!",file=sys.stderr)
                 self.agent.broadcast_msg(Msg_base("HELP",phan))
-                
+
+
+
+            #check si enemie
+            if self.agent.last_stun + 20 <= self.agent.round_num and self.agent.view_ents['opo']:
+                for opo_id in self.agent.view_ents['opo']:
+                    if dist(bust.coord,self.agent.view_ents['opo'][opo_id].coord) <= 1760:
+                        self.agent.action_planed = StunOpo(self.agent,opo_id)
+                        self.agent.action_planed.perform_action()
+                        return
+                    
             dist_b_p = dist(bust.coord,phan.coord)
             if dist_b_p < 1760:# and dist_b_p > 900:
                 if dist_b_p > 900:
@@ -292,36 +305,52 @@ class Agent:
         else:
             return ret
 
+    def can_stun(self):
+        return self.last_stun + 20 <= self.round_num
+
     def prepare_action(self):
         #update the action (if done, 0)
 
 
         self.msg = self.get_avail_msg()
 
-        
-        if  self.round_num <= 10:
-            self.action_planed = ExploreMap(self,self.map_ex)
-            return True
+    
 
         if self.action_planed != 0 and (self.action_planed.done or not self.action_planed.is_valid()):
             self.action_planed = 0
 
 
-        #first take message
-        
-        print("prepare actio",file=sys.stderr)
- 
-        
- 
-        #no message, try to choose an action if no action are planned
+
         if self.bust.state == 2: #assomé
             self.action_planed = WhenStunt() #anyway...
             return True
+
+        if self.action_planed != 0:
+            return True #ok on sait quoi faire
+        
+        #++++++ different phase
+        if  self.round_num <= 10:
+            ###### PHASE 1
+            print("Phase 1",file=sys.stderr)
+            self.action_planed = ExploreMap(self,self.map_ex) #default action
             
-        elif self.action_planed == 0:
-            #we need to find an action
+            if self.bust.state == 1: #transport phantom
+                self.action_planed = ReturnHome(self,self.home_coord)
+                
+            elif self.view_ents['phan']:
+               
+                phan_id = min(self.view_ents['phan'], key=lambda k: self.view_ents['phan'][k].state) 
+                if  self.view_ents['phan'][phan_id].state <= 3:
+                    self.action_planed = TakePhantom(self,phan_id)
+            
+           
+            return True
+        
+        elif self.round_num < 300:
+            print("Phase 2",file=sys.stderr)
             print("action0",self.view_ents,file=sys.stderr)
             print(self.last_stun,self.round_num,self.view_ents['opo'],file=sys.stderr)
+            
             if self.bust.state == 1: #transport phantom
                 self.action_planed = ReturnHome(self,self.home_coord)
             elif self.view_ents['phan']: #ok not empty, take phantom
@@ -333,7 +362,7 @@ class Agent:
             elif self.msg and self.msg.type == "HELP":
                 print("**on repond au HELP",file=sys.stderr)
                 self.action_planed = HelpBust(self,self.msg)
-            elif self.last_stun + 20 <= self.round_num and self.view_ents['opo']: #ok not empty, bust enemi
+            elif self.can_stun() and self.view_ents['opo']: #ok not empty, bust enemi
                 print("on va stuné ! ",file=sys.stderr)
                 for opo_id in self.view_ents['opo']:
                     if self.view_ents['opo'][opo_id].state == 1: #have phantom
@@ -347,10 +376,11 @@ class Agent:
                 self.action_planed = ExploreMap(self,self.map_ex)
                  
             return True
+        
         else:
+            print("Finale Phase",file=sys.stderr)
             return True
-
- 
+        
 
     def print_action(self):
         self.action_planed.perform_action()
@@ -363,14 +393,10 @@ class Map_explore:
         self.map =   [{'explor':0,'num_phan':0,'num_bust':0,'list_phan':[]}  for x in range(8*5)]
         if team_id == 0:
             self.map[0] = {'explor':1,'num_phan':0,'num_bust':0,'list_phan':[]} 
-        #    self.map[1] = {'explor':1,'num_phan':0,'num_bust':0} 
-        #    self.map[16] = {'explor':1,'num_phan':0,'num_bust':0} 
-            
+                 
         else:
             self.map[7*5] = {'explor':1,'num_phan':0,'num_bust':0,'list_phan':[]} 
-        #    self.map[15*8-1] = {'explor':1,'num_phan':0,'num_bust':0} 
-        #    self.map[14*8] = {'explor':1,'num_phan':0,'num_bust':0}
-            
+                 
     def print_map(self):
         for y in range(5):
             for x in range(8):
@@ -383,6 +409,13 @@ class Map_explore:
         y = int(c[1]/2001)
 
         return self.map[y*8+x]
+
+
+    def coord2zone_m1(self,c):
+        x = int(c[0]/2001)  #round to lower int
+        y = int(c[1]/2001)
+
+        return self.map[(4-y)*8+(7-x)]
 
 
     def default_coord(self,c):
@@ -408,32 +441,13 @@ class Map_explore:
                     min_empt = distance
                     zon_empt = zone_coord
 
-                if self.coord2zone(zone_coord)['list_phan'] and min(self.coord2zone(zone_coord)['list_phan']) < min_phan_minimum:
+                if self.coord2zone(zone_coord)['list_phan'] and min(self.coord2zone(zone_coord)['list_phan']) + distance/800 < min_phan_minimum:
                     min_phan_minimum = min(self.coord2zone(zone_coord)['list_phan'])
                     zon_phan_minimum = zone_coord        
 
-        #if zon_phan != -1 and zon_empt != -1:
-        #    if min_phan > min_empt:
-        #        return zon_empt
-        #    else:
-        #        return zon_phan
-
-
         return (zon_phan_minimum, zon_phan , zon_empt)
     
-        #if zon_phan_minimum != -1: return zon_phan_minimum
-        #elif zon_phan != -1: return zon_phan
-        #elif zon_empt != -1: return zon_empt
-        #else:
-        #    if tid == 1:
-        #        return (14000,8000)
-        #    else:
-        #        return (2000,1000)
-        #raise Exception('Heuuuuu')
         
-        
-
-
 # Send your busters out into the fog to trap ghosts and bring them home!
 
 busters_per_player = int(input())  # the amount of busters you control
@@ -482,13 +496,21 @@ while True:
         #update zone
         map_ex.coord2zone((x,y))['num_phan'] = 0
         map_ex.coord2zone((x,y))['list_phan'] = []
+        
+        if round_num < 20: #symetrie
+            map_ex.coord2zone_m1((x,y))['num_phan'] = 0
+            map_ex.coord2zone_m1((x,y))['list_phan'] = []
+        
         if entity_type == -1:
             map_ex.coord2zone((x,y))['num_phan'] += 1
             map_ex.coord2zone((x,y))['list_phan'].append(state)
+            if round_num < 20: #symetrie
+                map_ex.coord2zone_m1((x,y))['num_phan'] += 1
+                map_ex.coord2zone_m1((x,y))['list_phan'].append(state) 
         if entity_type == my_team_id: #mon bus
             map_ex.coord2zone((x,y))['explor'] = 1 #on a explore
-
- 
+         #   if round_num < 100: #symetrie
+         #       map_ex.coord2zone_m1((x,y))['explor'] = 1 #on a explore
 
     
     pls.update_entities(enti,round_num)
