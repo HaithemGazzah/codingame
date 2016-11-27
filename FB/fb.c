@@ -1,11 +1,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
 #include <math.h>
-
-
-
-typedef struct coord {int x,y;} coord;
+/**
+ * Grab Snaffles and try to throw them through the opponent's goal!
+ * Move towards a Snaffle and use your team id to determine where you need to throw it.
+ **/
+typedef struct coord {float x,y;} coord;
 
 typedef enum en_t {WIZARD, OPPONENT_WIZARD ,SNAFFLE,BLUDGER} en_t;
 
@@ -32,6 +34,25 @@ typedef struct game_stat_t
 } game_stat_t;
 
 
+float comp_dist(coord c1,coord c2);
+
+coord vector_from_points(coord c1,coord c2)
+{
+    coord c;
+    c.x = c2.x - c1.x;
+    c.y = c2.y - c1.y;
+    return c;
+}
+
+//return normalized vector from 2 points
+coord compute_norm_vect(coord c1,coord c2)
+{
+    coord cv = vector_from_points(c1,c2);
+    float norm_v = comp_dist(c1,c2);
+    cv.x = (float)cv.x/norm_v;
+    cv.y = (float)cv.y/norm_v;
+    return cv;
+}
 
 float comp_dist(coord c1,coord c2)
 {
@@ -46,7 +67,7 @@ entity_t get_sor(int id,game_stat_t* gs) //0 or 1
 
 void print_action_move(coord c,int thrust)
 {
-  printf("MOVE %i %i %i\n",c.x,c.y,thrust);
+  printf("MOVE %i %i %i\n",(int)c.x,(int)c.y,thrust);
 }
 
 void print_action_throw(coord c,int power)
@@ -65,7 +86,7 @@ entity_t get_closest_sna(entity_t *wiz,game_stat_t* st,int entity_id_mask)
 
       if(entity_id_mask != -1 && sna.entityId == entity_id_mask) continue; //mask one entity
       float dist = comp_dist(wiz->c,sna.c);
-      //fprintf(stderr,"dist %f\n",dist);
+     // fprintf(stderr,"dist %f\n",dist);
       if(dist < dist_min)
 	{
 	  dist_min = dist;
@@ -99,7 +120,7 @@ int main()
 {
    // if 0 you need to score on the right of the map, if 1 you need to score on the left
  
-
+  int step = -1;
   game_stat_t stat;
   scanf("%d", &(stat.myTeamId)); 
     
@@ -113,6 +134,7 @@ int main()
 
     int num_wiz = 0;
     int num_op = 0;
+	fprintf(stderr,"step : %d\n",++step);
 	
     for (int i = 0; i < entities; i++) {
       int entityId; // entity identifier
@@ -124,6 +146,9 @@ int main()
       int state; // 1 if the wizard is holding a Snaffle, 0 otherwise
       scanf("%d%s%d%d%d%d%d", &entityId, entityType, &x, &y, &vx, &vy, &state);
 
+      
+      fprintf(stderr,"%d,%s,%d,%d,%d,%d,%d\n", entityId, entityType, x, y, vx, vy, state);
+      
       stat.ents[i].entityId = entityId;
       stat.ents[i].et = get_type(entityType);
       stat.ents[i].c.x = x; 
@@ -175,14 +200,23 @@ int main()
 	//find the closest
 	
 	
-	    //	fprintf(stderr, "wiz %i\n",wiz.entityId);
+	fprintf(stderr, "wiz %i\n",wiz.entityId);
 	entity_t closest_sna =  get_closest_sna(&wiz,&stat,entity_id_mask);
 	entity_id_mask = closest_sna.entityId;
 	//printf("MOVE 8000 3750 100\n");
 
+    
 
-
-
+    coord cn = compute_norm_vect(wiz.c,closest_sna.c);
+    
+    //fprintf(stderr,"norm %f,%f\n",cn.x,cn.y);
+    cn.x = cn.x*(float)150;
+    cn.y = cn.y*(float)150;
+    
+    int vx_n = wiz.vx + cn.x;
+    int vy_n = wiz.vy + cn.y;
+    fprintf(stderr,"predicted : %f,%f\n",wiz.c.x+vx_n,wiz.c.y+vy_n);
+	fprintf(stderr,"predicted ve: %f,%f\n",vx_n*0.75,vy_n*0.75);
 	
 	print_action_move(closest_sna.c,150);
       }
