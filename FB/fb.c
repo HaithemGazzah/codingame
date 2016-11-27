@@ -36,6 +36,9 @@ typedef struct game_stat_t
 
 float comp_dist(coord c1,coord c2);
 
+
+
+
 coord vector_from_points(coord c1,coord c2)
 {
     coord c;
@@ -49,8 +52,8 @@ coord compute_norm_vect(coord c1,coord c2)
 {
     coord cv = vector_from_points(c1,c2);
     float norm_v = comp_dist(c1,c2);
-    cv.x = (float)cv.x/norm_v;
-    cv.y = (float)cv.y/norm_v;
+    cv.x = cv.x/norm_v;
+    cv.y = cv.y/norm_v;
     return cv;
 }
 
@@ -213,10 +216,16 @@ int main()
     cn.x = cn.x*(float)150;
     cn.y = cn.y*(float)150;
     
-    int vx_n = wiz.vx + cn.x;
-    int vy_n = wiz.vy + cn.y;
-    fprintf(stderr,"predicted : %f,%f\n",wiz.c.x+vx_n,wiz.c.y+vy_n);
-	fprintf(stderr,"predicted ve: %f,%f\n",vx_n*0.75,vy_n*0.75);
+    float vx_n = wiz.vx + cn.x;
+    float vy_n = wiz.vy + cn.y;
+    
+    int pred_cord_x = round(wiz.c.x+vx_n);
+    int pred_cord_y = round(wiz.c.y+vy_n);
+    
+    int pred_vx = round(vx_n*0.75);
+    int pred_vy = round(vy_n*0.75);
+    fprintf(stderr,"predicted : %i,%i\n",pred_cord_x,pred_cord_y);
+	fprintf(stderr,"predicted ve: %i,%i\n",pred_vx,pred_vy);
 	
 	print_action_move(closest_sna.c,150);
       }
