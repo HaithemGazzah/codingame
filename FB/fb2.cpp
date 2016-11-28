@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <map>
 
+#include <cmath>
 #define MAX_SIZE 10
 using namespace std;
 
@@ -99,6 +100,8 @@ public:
     switch(_type)
       {
       case OPPONENT_WIZARD:
+      case BLUDGER:
+	
       case WIZARD:
 	this->weight = 1;
 	this->friction = 0.75;
@@ -135,7 +138,7 @@ public:
   int list_op[2]; //id des oponant
   static int team_id;
 
-  inline entity& get_sna(int sna_id)
+  inline Entity& get_sna(int sna_id)
   {
     return list_ent[list_sna[sna_id]];
   }
@@ -189,7 +192,7 @@ public:
     //first approach, good score if snafles are at the right side
     // if 0 you need to score on the right of the map, if 1 you need to score on the left
 
-    int num_sna = 0
+    int num_sna = 0;
     if(team_id == 0)
       {
 	for(int i = 0;i<num_sna;++i)
