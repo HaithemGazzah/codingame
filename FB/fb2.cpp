@@ -17,6 +17,8 @@ typedef enum act_t {MOVE, THROW} act_t;
 typedef enum en_t {WIZARD, OPPONENT_WIZARD ,SNAFFLE,BLUDGER} en_t;
 
 
+
+
 struct Coordinates
 {
 public:
@@ -31,15 +33,46 @@ public:
     c.y = c2.y - c1.y; 
     return c; 
   }
- 
-  static float comp_dist(Coordinates c1,Coordinates c2) 
+
+  //thanks to magus, http://files.magusgeek.com/csb/csb.html
+  Coordinates closest(const Coordinates &a,  const Coordinates &b) const
+  {
+    float da = b.y - a.y;
+    float db = a.x - b.x;
+    float c1 = da*a.x + db*a.y;
+    float c2 = -db*this->x + da*this->y;
+    float det = da*da + db*db;
+    float cx = 0;
+    float cy = 0;
+
+    if (det != 0)
+      {
+        cx = (da*c1 - db*c2) / det;
+        cy = (da*c2 + db*c1) / det;
+      }
+    else
+      {
+        cx = this->x;
+        cy = this->y;
+      }
+
+    return Coordinates(cx, cy);
+}
+
+  
+  static float comp_dist(const Coordinates &c1,const Coordinates &c2) 
   { 
     return sqrt(pow(c1.x-c2.x,2) + pow(c1.y - c2.y,2)); 
   } 
 
+
+  static float comp_dist2(const Coordinates &c1,const Coordinates &c2) 
+  { 
+    return (c1.x-c2.x)*(c1.x-c2.x) + (c1.y - c2.y)*(c1.y - c2.y); 
+  } 
  
   //return normalized vector from 2 points 
-  static Coordinates compute_norm_vect(Coordinates c1,Coordinates c2) 
+  static Coordinates compute_norm_vect(const Coordinates &c1,const Coordinates &c2) 
   { 
     Coordinates cord = vector_from_points(c1,c2); 
     float norm_v = comp_dist(c1,c2); 
@@ -48,7 +81,9 @@ public:
     return cord; 
   } 
 	 
- 
+
+
+  
 };
 
 
@@ -72,6 +107,21 @@ public:
   }
 };
 
+class Entity;
+
+struct Collision
+{
+public:
+  Collision():a(NULL),b(NULL),time(0){}
+
+  Collision(const Entity* a_, const Entity* b_,float t_):a(a_),b(b_),time(t_){}
+  //private:
+  const Entity* a;
+  const Entity *b;
+  float time;
+};
+
+
 
 
 class Entity
@@ -83,6 +133,7 @@ public:
   int vy;
   float weight;
   float friction;
+  float radius;
   int state;
   en_t type;
   Entity()
@@ -105,10 +156,12 @@ public:
       case WIZARD:
 	this->weight = 1;
 	this->friction = 0.75;
+	this->radius = 400;
 	break;
       case SNAFFLE:
 	this->weight= 0.5;
 	this->friction=0.75;
+	this->radius = 150;
 	break;
       }
 
@@ -124,7 +177,93 @@ public:
     cerr<<"ID = "<<id<<" X = "<<c.x<<" Y ="<<c.y<<" vX="<<vx<<" vY="<<vy<<endl;
 
   }
+
+
+  float comp_dist_to_2(const Entity& e) const
+  {
+    return Coordinates::comp_dist2(c,e.c);
+  }
+
+  
+  bool collision(const Entity &u,Collision &col_out) const
+  {
+    // Distance carré
+    float dist = comp_dist_to_2(u);
+
+    // Somme des rayons au carré
+    float sr = (this->radius + u.radius)*(this->radius + u.radius);
+
+    // On prend tout au carré pour éviter d'avoir à appeler un sqrt inutilement. C'est mieux pour les performances
+
+    if (dist < sr) {
+        // Les objets sont déjà l'un sur l'autre. On a donc une collision immédiate
+      //        return Collision(this, u, 0.0);
+	col_out = Collision(this, &u, 0.0);
+	return true;
+    }
+
+    // Optimisation. Les objets ont la même vitesse ils ne pourront jamais se rentrer dedans
+    if (this->vx == u.vx && this->vy == u.vy) {
+      //        return null;
+	return false;
+    }
+
+    // On se met dans le référentiel de u. u est donc immobile et se trouve sur le point (0,0) après ça
+    float lx = this->c.x - u.c.x;
+    float ly = this->c.y - u.c.y;
+    Coordinates myp = Coordinates(lx, ly);
+    float lvx = this->vx - u.vx;
+    float lvy = this->vy - u.vy;
+    Coordinates up = Coordinates(0, 0);
+
+    // On cherche le point le plus proche de u (qui est donc en (0,0)) sur la droite décrite par notre vecteur de vitesse
+    Coordinates p = up.closest(myp, Coordinates(lx + lvx, ly + lvy));
+
+    // Distance au carré entre u et le point le plus proche sur la droite décrite par notre vecteur de vitesse
+    //    float pdist = up.comp_dist_to_2(p);
+    float pdist = Coordinates::comp_dist2(up,p);
+
+    // Distance au carré entre nous et ce point
+    //    float mypdist = myp.comp_dist_to_2(p);
+    float mypdist = Coordinates::comp_dist2(myp,p);
+    // Si la distance entre u et cette droite est inférieur à la somme des rayons, alors il y a possibilité de collision
+    if (pdist < sr) {
+        // Notre vitesse sur la droite
+        float length = sqrt(lvx*lvx + lvy*lvy);
+
+        // On déplace le point sur la droite pour trouver le point d'impact
+        float backdist = sqrt(sr - pdist);
+        p.x = p.x - backdist * (lvx / length);
+        p.y = p.y - backdist * (lvy / length);
+
+        // Si le point s'est éloigné de nous par rapport à avant, c'est que notre vitesse ne va pas dans le bon sens
+        if ( Coordinates::comp_dist2(myp,p)> mypdist) {
+	  //            return null;
+	  return false;
+        }
+	pdist = Coordinates::comp_dist(p,myp);
+	  //pdist = p.distance(myp);
+
+        // Le point d'impact est plus loin que ce qu'on peut parcourir en un seul tour
+        if (pdist > length) {
+            return false;
+        }
+
+        // Temps nécessaire pour atteindre le point d'impact
+        float t = pdist / length;
+
+	//        return Collision(this, u, t);
+	col_out = Collision(this, &u, t);
+	return true;
+    }
+
+    //    return null;
+    return false;
+}
 };
+
+
+
 
 
 class GameState 
@@ -138,10 +277,16 @@ public:
   int list_op[2]; //id des oponant
   static int team_id;
 
-  inline Entity& get_sna(int sna_id)
+  inline const Entity& get_sna(int sna_id) const
   {
     return list_ent[list_sna[sna_id]];
   }
+
+  inline const Entity& get_wiz(int wiz_id) const
+  {
+    return list_ent[list_wiz[wiz_id]];
+  }
+  
   GameState()
   {
   }
@@ -298,10 +443,23 @@ int main()
   while (1) {
     game_state = new GameState();
     game_state->create_entity_from_input();
-    game_state->print_entities();
+    //game_state->print_entities();
+
+    Entity wiz = game_state->get_wiz(0);
+
+    Action act;
+    act.type = MOVE;
+    act.c = wiz.c;
+    act.arg = 150;
     for (int i = 0; i < 2; i++)
       {
 	//gamestate
+	act.print();
+	Collision col_out;
+	if(wiz.collision(game_state->get_wiz(1),col_out))
+	  {
+	    cerr << col_out.time << endl;
+	  }
 
       }
 
