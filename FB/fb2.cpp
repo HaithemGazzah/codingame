@@ -15,7 +15,7 @@ class GameState;
 
 typedef enum act_t {MOVE, THROW} act_t;
 typedef enum en_t {WIZARD, OPPONENT_WIZARD ,SNAFFLE,BLUDGER} en_t;
-
+std::uint8_t ent_mask[4]={0x01,0x02,0x04,0x80};
 
 struct Coordinates
 {
@@ -68,6 +68,8 @@ public:
       case THROW:
 	cout<<"THROW "<<this->c.x<<" "<<this->c.y<<" "<<this->arg<<endl;
 	break;
+		default:
+		cerr<<"NULL ACTION NOTHING TO PRINT"<<endl;
       }
   }
 };
@@ -113,16 +115,15 @@ public:
       }
 
   }
-	
-  int get_closest_entity(en_t targetType,GameState *game_state,float *out_dist)
-  {
-    //TODO
-  }
-	
+	/*
+		type_mask : used to filter on more than on type of entity
+		id_mask_tab :  is used to exclude some ids can be replaced by boolean table 
+		here we are using bit shifting but may prove problematic with endianees
+	*/
+  int get_closest_entity(std::uint8_t type_mask,GameState *game_state,std::uint16_t id_mask_tab,float *out_dist);
   void print()
   {
     cerr<<"ID = "<<id<<" X = "<<c.x<<" Y ="<<c.y<<" vX="<<vx<<" vY="<<vy<<endl;
-
   }
 };
 
@@ -215,7 +216,30 @@ public:
 	
 };
 
+int Entity::get_closest_entity(std::uint8_t type_mask,GameState *game_state,std::uint16_t id_mask_tab,float *out_dist)
+ {
 
+	*out_dist = 50000;
+	int index_min =-1;
+	std::uint16_t id_mask = 0;
+    for(int i=0;i<game_state->num_ents; i++)
+	{
+		
+		id_mask = 0;
+		id_mask |=(1u << i); 
+		if (id_mask & id_mask_tab && ent_mask[game_state->list_ent[i].type] & type_mask)
+		{
+			float dist = Coordinates::comp_dist(this->c,game_state->list_ent[i].c);
+			if(dist < *out_dist)
+			{
+				*out_dist = dist;
+				index_min=i;
+			}
+		}
+	}
+	return index_min;
+}
+	
 class Simulator 
 {
 public:
@@ -273,10 +297,53 @@ struct gamestate_queue
 };
 class IA_engine
 {
+public:
   Simulator simulator;
   Action get_action(int entity_index,GameState *game_state,gamestate_queue *history)
   {
-    //return Action(MOVE, 
+  
+		Action a;
+		if(game_state->list_ent[entity_index].state==0)
+		{
+			//get closest SNAFFLE or BLUDGER 
+			uint8_t type_mask = ent_mask[SNAFFLE] | ent_mask[BLUDGER];
+			//And exclude the first snaffel from the search
+			uint16_t id_mask = 0xFFFF;
+			id_mask &=~(1u<< game_state->list_sna[0]);
+			float out_distance=0;
+			cerr<<"id_mask = "<<id_mask<<endl;
+			int index_closest = game_state->list_ent[entity_index].get_closest_entity(type_mask,game_state,id_mask,&out_distance);
+			if(index_closest>-1)
+			{
+				a.type = MOVE;
+				a.c.x = game_state->list_ent[index_closest].c.x;
+				a.c.y = game_state->list_ent[index_closest].c.y;
+				a.arg = 100;
+			}
+			else
+			{
+			    cerr<<"nothing close found"<<endl;
+			}
+		}
+		else
+		{
+				if (GameState::team_id == 0)
+				{
+					a.type = THROW;
+					a.c.x = 16000;
+					a.c.y = 3700;
+					a.arg = 500;
+				}
+				else
+				{
+					a.type = THROW;
+					a.c.x = 0;
+					a.c.y = 3700;
+					a.arg = 500;
+				}
+
+		}
+		return a;
   }
 	
 };
@@ -301,7 +368,8 @@ int main()
     game_state->print_entities();
     for (int i = 0; i < 2; i++)
       {
-	//gamestate
+		Action a = ia.get_action(game_state->list_wiz[i],game_state,&history);	
+		a.print();
 
       }
 
