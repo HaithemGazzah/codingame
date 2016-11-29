@@ -185,28 +185,32 @@ public:
   }
 
   
-  bool collision(const Entity &u,Collision &col_out) const
+  bool collision(const Entity &u,Collision &col_out,bool is_point) const
   {
     // Distance carré
     float dist = comp_dist_to_2(u);
 
     // Somme des rayons au carré
-    float sr = (this->radius + u.radius)*(this->radius + u.radius);
+    float sr;
+    if(!is_point)
+      sr = (this->radius + u.radius)*(this->radius + u.radius);
+    else
+       sr = (this->radius)*(this->radius);
 
     // On prend tout au carré pour éviter d'avoir à appeler un sqrt inutilement. C'est mieux pour les performances
 
-    if (dist < sr) {
+    if (dist < sr)
+      {
         // Les objets sont déjà l'un sur l'autre. On a donc une collision immédiate
-      //        return Collision(this, u, 0.0);
-	col_out = Collision(this, &u, 0.0);
+   	col_out = Collision(this, &u, 0.0);
 	return true;
-    }
+      }
 
     // Optimisation. Les objets ont la même vitesse ils ne pourront jamais se rentrer dedans
-    if (this->vx == u.vx && this->vy == u.vy) {
-      //        return null;
+    if (this->vx == u.vx && this->vy == u.vy)
+      {
 	return false;
-    }
+      }
 
     // On se met dans le référentiel de u. u est donc immobile et se trouve sur le point (0,0) après ça
     float lx = this->c.x - u.c.x;
@@ -220,14 +224,14 @@ public:
     Coordinates p = up.closest(myp, Coordinates(lx + lvx, ly + lvy));
 
     // Distance au carré entre u et le point le plus proche sur la droite décrite par notre vecteur de vitesse
-    //    float pdist = up.comp_dist_to_2(p);
     float pdist = Coordinates::comp_dist2(up,p);
 
     // Distance au carré entre nous et ce point
     //    float mypdist = myp.comp_dist_to_2(p);
     float mypdist = Coordinates::comp_dist2(myp,p);
     // Si la distance entre u et cette droite est inférieur à la somme des rayons, alors il y a possibilité de collision
-    if (pdist < sr) {
+    if (pdist < sr)
+      {
         // Notre vitesse sur la droite
         float length = sqrt(lvx*lvx + lvy*lvy);
 
@@ -237,25 +241,25 @@ public:
         p.y = p.y - backdist * (lvy / length);
 
         // Si le point s'est éloigné de nous par rapport à avant, c'est que notre vitesse ne va pas dans le bon sens
-        if ( Coordinates::comp_dist2(myp,p)> mypdist) {
-	  //            return null;
-	  return false;
-        }
+        if ( Coordinates::comp_dist2(myp,p)> mypdist)
+	  {
+	    return false;
+	  }
 	pdist = Coordinates::comp_dist(p,myp);
-	  //pdist = p.distance(myp);
-
+	
         // Le point d'impact est plus loin que ce qu'on peut parcourir en un seul tour
-        if (pdist > length) {
+        if (pdist > length)
+	  {
             return false;
-        }
+	  }
 
         // Temps nécessaire pour atteindre le point d'impact
         float t = pdist / length;
 
-	//        return Collision(this, u, t);
+
 	col_out = Collision(this, &u, t);
 	return true;
-    }
+      }
 
     //    return null;
     return false;
@@ -447,16 +451,20 @@ int main()
 
     Entity wiz = game_state->get_wiz(0);
 
+
+    Entity sna = game_state->get_sna(0);
+
+    
     Action act;
     act.type = MOVE;
-    act.c = wiz.c;
+    act.c = sna.c;
     act.arg = 150;
     for (int i = 0; i < 2; i++)
       {
 	//gamestate
 	act.print();
 	Collision col_out;
-	if(wiz.collision(game_state->get_wiz(1),col_out))
+	if(wiz.collision(sna,col_out,true))
 	  {
 	    cerr << col_out.time << endl;
 	  }
