@@ -116,12 +116,12 @@ struct Collision
 public:
   Collision():a(NULL),b(NULL),time(0){}
   
-  Collision(const Entity* a_, wall_t wt_,float t_):
+  Collision(Entity* a_, wall_t wt_,float t_):
     a(a_),b(NULL),time(t_),wt(wt_){}
-  Collision(const Entity* a_, const Entity* b_,float t_):a(a_),b(b_),time(t_){}
+  Collision(Entity* a_, Entity* b_,float t_):a(a_),b(b_),time(t_){}
   //private:
-  const Entity* a;
-  const Entity *b;
+  Entity* a;
+  Entity *b;
   float time;
   wall_t wt; //if a wall....
 };
@@ -160,8 +160,16 @@ public:
     switch(_type)
       {
       case OPPONENT_WIZARD:
+	this->weight = 1;
+	this->friction = 0.75;
+	this->radius = 400;
+	break;
       case BLUDGER:
-	
+	this->weight = 8;
+	this->friction = 0.9;
+	this->radius = 200;
+	break;
+
       case WIZARD:
 	this->weight = 1;
 	this->friction = 0.75;
@@ -197,7 +205,7 @@ public:
 
 
   //check if a collision happen between this and a wall
-  bool check_collision_walls(Collision &col_out) const
+  bool check_collision_walls(Collision &col_out)
   {
 
     //this is a wall !!
@@ -274,7 +282,7 @@ public:
   }
 
   //check if a collision can happen between this and u
-  bool collision(const Entity &u,Collision &col_out,bool is_point) const
+  bool collision(Entity &u,Collision &col_out,bool is_point) 
   {
 
 
@@ -529,10 +537,15 @@ public:
 	  list_ent[i].setProperties(entityId, WIZARD ,x ,y ,vx ,vy ,state);
 	  list_wiz[wiz_count++]=i;
 	}
-      else
+      else if (entityType.compare("OPPONENT_WIZARD") == 0)
 	{
 	  list_ent[i].setProperties(entityId, OPPONENT_WIZARD ,x ,y ,vx ,vy ,state);
 	  list_op[op_count++]=i;
+	}
+      if (entityType.compare("BLUDGER") == 0)
+	{
+	  list_ent[i].setProperties(entityId, BLUDGER ,x ,y ,vx ,vy ,state);
+
 	}
     }
     num_sna = sna_count;
@@ -571,7 +584,7 @@ public:
     
   }
 
-
+  
 	
 };
 
@@ -579,27 +592,85 @@ public:
 class Simulator 
 {
 public:
-  void predict_entity_state(Entity *entity, Action *action, int *out_x, int *out_y, int *out_vx,int *out_vy)
+ 
+  GameState predict_state(const GameState &game_state, const Action &a,const Action &b)
   {
-    switch(action->type)
+    GameState game_state_n = game_state;
+
+    Entity wiz1 = game_state_n.get_wiz(0);
+    Entity wiz2 = game_state_n.get_wiz(1);
+
+    wiz1.prepare_move(a);
+    wiz2.prepare_move(b);
+
+
+    //simulation of collisions
+    const int num_ent = game_state_n.num_sna + 4 + 2;
+    float t = 0.0;
+
+    while (t < 1.0)
       {
-      case MOVE:
-	Coordinates cn = Coordinates::compute_norm_vect(entity->c,action->c);
-	cn.x = cn.x*(float)action->arg;
-	cn.y = cn.y*(float)action->arg;
-				
-	float vx_n = entity->vx + cn.x;
-	float vy_n = entity->vy + cn.y;
-				
-	*out_x = round(entity->c.x+vx_n);
-	*out_y = round(entity->c.y+vy_n);
-				
-	*out_vx = round(vx_n*entity->friction/entity->weight);
-	*out_vy = round(vy_n*entity->friction/entity->weight);
+        Collision firstCollision(NULL,NULL,18.0);
+
+
+        for (int i = 0; i < num_ent; ++i)
+	  {
+	    //check i with wall
+	    Collision col_out;
+	    if(game_state_n.list_ent[i].check_collision_walls(col_out))
+	      if(col_out.time + t < 1.0 && col_out.time < firstCollision.time)
+		firstCollision = col_out;
+		  
+	      
+	    for (int j = i + 1; j < num_ent; ++j)
+	      {
+                Collision col_out;
+		if(game_state_n.list_ent[i].collision(game_state_n.list_ent[j],col_out,false))
+		  if(col_out.time + t < 1.0 && col_out.time < firstCollision.time)
+		    firstCollision = col_out;   
+
+
+	      }
+
+           
+        }
+
+        if (firstCollision.time == 18) //no collision
+	  {
+
+            for (int i = 0; i < num_ent; ++i)
+	      {
+                game_state_n.list_ent[i].execute_move(1.0 - t);
+	      }
+	    
+
+            t = 1.0;
+        } else
+	  {
+
+            for (int i = 0; i < num_ent; ++i)
+	      {
+
+		game_state_n.list_ent[i].execute_move(firstCollision.time - t);
+	      }
+
+            // On joue la collision
+	    if(firstCollision.b != NULL)
+	      firstCollision.a->compute_collision_effect(*firstCollision.b);
+	    else
+	      firstCollision.a->compute_collision_effect_wall(firstCollision.wt);
+
+            t += firstCollision.time;
+        }
+    }
+
+    for (int i = 0; i < num_ent; ++i)
+      {
+	
+	game_state_n.list_ent[i].finish_action();
       }
-  }
-  GameState * predict_state(GameState* game_state)
-  {
+   
+    
   }
 };
 struct gamestate_queue
