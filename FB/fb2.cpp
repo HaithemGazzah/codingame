@@ -1,11 +1,13 @@
 //Copyright Haithem Gazzah & Matthieu Ospici
 
 
+//thanks to magus for some functions related to collisions, http://files.magusgeek.com/csb/csb.html
+
 #include <iostream>
 #include <string>
 #include <vector>
 #include <algorithm>
-#include <map>
+#include <cassert>
 
 #include <cmath>
 #define MAX_SIZE 10
@@ -17,7 +19,7 @@ typedef enum act_t {MOVE, THROW} act_t;
 typedef enum en_t {WIZARD, OPPONENT_WIZARD ,SNAFFLE,BLUDGER} en_t;
 
 
-
+typedef enum wall_t {R_WALL, L_WALL,T_WALL,B_WALL,WALL_NONE} wall_t;
 
 struct Coordinates
 {
@@ -34,7 +36,7 @@ public:
     return c; 
   }
 
-  //thanks to magus, http://files.magusgeek.com/csb/csb.html
+  //thanks to magus for this function, http://files.magusgeek.com/csb/csb.html
   Coordinates closest(const Coordinates &a,  const Coordinates &b) const
   {
     float da = b.y - a.y;
@@ -113,12 +115,15 @@ struct Collision
 {
 public:
   Collision():a(NULL),b(NULL),time(0){}
-
+  
+  Collision(const Entity* a_, wall_t wt_,float t_):
+    a(a_),b(NULL),time(t_),wt(wt_){}
   Collision(const Entity* a_, const Entity* b_,float t_):a(a_),b(b_),time(t_){}
   //private:
   const Entity* a;
   const Entity *b;
   float time;
+  wall_t wt; //if a wall....
 };
 
 
@@ -139,6 +144,10 @@ public:
   Entity()
   {
   }
+
+  Entity(en_t et_):type(et_){}
+
+  
   void setProperties(int _id, en_t _type, int _x, int _y, int _vx, int _vy,int _state)
   {
     this->id = _id;
@@ -163,6 +172,8 @@ public:
 	this->friction=0.75;
 	this->radius = 150;
 	break;
+      default:
+	cerr << "HEUUUU ERROR !!!" << endl;
       }
 
   }
@@ -184,9 +195,91 @@ public:
     return Coordinates::comp_dist2(c,e.c);
   }
 
-  
+
+  //check if a collision happen between this and a wall
+  bool check_collision_walls(Collision &col_out) const
+  {
+
+    //this is a wall !!
+    Coordinates lc;
+    lc = c;
+    
+    lc.x += this->vx;
+    lc.y += this->vy;
+    
+    
+    float total_dist = Coordinates::comp_dist(c,lc);
+    
+    float time = 2;
+    
+    
+    cerr << total_dist << "  " << lc.x <<" " <<  " " <<lc.y << endl;
+    if(lc.x - this->radius < 0 )
+      {
+	//left wall
+	float dist_impact = Coordinates::comp_dist(c,Coordinates(this->radius,lc.y));
+	cerr << " LEFT " << " " << total_dist << " " << dist_impact <<endl;
+	time = dist_impact/total_dist;
+	col_out = Collision(this,L_WALL , time);
+	
+	
+      }
+    
+    if(lc.x + this->radius > 16001)
+      {
+	//right wall
+	
+	float dist_impact = Coordinates::comp_dist(c,Coordinates(16001 - this->radius,lc.y));
+	cerr << " RIGHT " << " " << total_dist << " " << dist_impact <<endl;
+	if(dist_impact/total_dist < time)
+	  {
+	    time = dist_impact/total_dist;
+	    
+	    col_out = Collision(this,R_WALL , time);
+	  }
+      }
+    
+    if(lc.y - this->radius < 0 )
+      {
+	//top wall
+
+	float	dist_impact = Coordinates::comp_dist(c,Coordinates(lc.x,this->radius));
+		cerr << " TOP " << " " << total_dist << " " << dist_impact <<endl;
+	if(dist_impact/total_dist < time)
+	  {
+	    time = dist_impact/total_dist;
+	    col_out = Collision(this,T_WALL , time);
+	  }
+      }
+    
+    if(lc.y + this->radius > 7501)
+      {
+	//bottom wall
+	float dist_impact = Coordinates::comp_dist(c,Coordinates(lc.x-this->radius,7501));
+	
+	cerr << " BOTO " << " " << total_dist << " " << dist_impact <<endl;
+	if(dist_impact/total_dist < time)
+	  {
+	    time = dist_impact/total_dist;
+	    col_out = Collision(this,B_WALL , time);
+	  }
+      }
+
+
+    if(time >= 2)
+      return false; //no collision with a wall
+    else
+      return true;
+      
+  }
+
+  //check if a collision can happen between this and u
   bool collision(const Entity &u,Collision &col_out,bool is_point) const
   {
+
+
+ 
+    
     // Distance carré
     float dist = comp_dist_to_2(u);
 
@@ -195,7 +288,7 @@ public:
     if(!is_point)
       sr = (this->radius + u.radius)*(this->radius + u.radius);
     else
-       sr = (this->radius)*(this->radius);
+      sr = (this->radius)*(this->radius);
 
     // On prend tout au carré pour éviter d'avoir à appeler un sqrt inutilement. C'est mieux pour les performances
 
@@ -263,8 +356,124 @@ public:
 
     //    return null;
     return false;
-}
+  }
+
+
+  void compute_collision_effect_wall(wall_t wal)
+  {
+    switch(wal)
+      {
+      case R_WALL:
+	vx = -vx;
+	break;
+      case L_WALL:
+	vx = -vx;
+	break;
+      case T_WALL:
+	vy = -vy;
+	break;
+      case B_WALL:
+	vy = -vy;
+	break;
+      case WALL_NONE:
+	cerr << "************* ERRRRERU WALL " << endl;
+      }
+  }
+
+  void compute_collision_effect(Entity &u)
+  {
+    if (u.type == SNAFFLE && (this->type == WIZARD ||this->type == OPPONENT_WIZARD ))
+      {
+	u.c  = this->c;
+	u.vx = this->vx;
+	u.vy = this->vy;
+      }
+    else
+      {
+
+        float m1 = this->weight;
+        float m2 = u.weight;
+
+        // Si les masses sont égales, le coefficient sera de 2. Sinon il sera de 11/10
+        float mcoeff = (m1 + m2) / (m1 * m2);
+
+        float nx = this->c.x - u.c.x;
+        float ny = this->c.y - u.c.y;
+
+        // Distance au carré entre les 2 pods. Cette valeur pourrait être écrite en dure car ce sera toujours 800²
+        float nxnysquare = nx*nx + ny*ny;
+
+        float dvx = this->vx - u.vx;
+        float dvy = this->vy - u.vy;
+
+        // fx et fy sont les composantes du vecteur d'impact. product est juste la pour optimiser
+        float product = nx*dvx + ny*dvy;
+        float fx = (nx * product) / (nxnysquare * mcoeff);
+        float fy = (ny * product) / (nxnysquare * mcoeff);
+
+        // On applique une fois le vecteur d'impact à chaque pod proportionnellement à sa masse
+        this->vx -= fx / m1;
+        this->vy -= fy / m1;
+        u.vx += fx / m2;
+        u.vy += fy / m2;
+
+      
+        float impulse = sqrt(fx*fx + fy*fy);
+        cerr << "impu " << impulse << endl;
+        if (impulse < 100.0)
+	  {
+            fx = fx * 100.0 / impulse;
+            fy = fy * 100.0 / impulse;
+	  }
+
+        // On applique une deuxième fois le vecteur d'impact à chaque pod proportionnellement à sa masse
+        this->vx -= fx / m1;
+        this->vy -= fy / m1;
+        u.vx += fx / m2;
+        u.vy += fy / m2;
+      }
+  }
+
+
+
+  //update speed vector
+  void prepare_move(const Action& act)
+  {
+
+
+    assert(act.type == MOVE);
+    Coordinates cn = Coordinates::compute_norm_vect(this->c,act.c);
+    cn.x = cn.x*(float)act.arg/weight;
+    cn.y = cn.y*(float)act.arg/weight;
+
+
+    this->vx += cn.x;
+    this->vy += cn.y;
+
+
+  }
+
+
+  void execute_move(float t)
+  {
+    this->c.x += this->vx * t;
+    this->c.y += this->vy * t;
+  }
+
+
+
+
+  void finish_action()
+  {
+    this->c.x = round(this->c.x);
+    this->c.y = round(this->c.y);
+    this->vx = round(this->vx * friction);
+    this->vy = round(this->vy * friction);
+
+  }
+ 
 };
+
 
 
 
@@ -361,6 +570,8 @@ public:
     return num_sna;
     
   }
+
+
 	
 };
 
@@ -447,27 +658,80 @@ int main()
   while (1) {
     game_state = new GameState();
     game_state->create_entity_from_input();
-    //game_state->print_entities();
+    game_state->print_entities();
 
-    Entity wiz = game_state->get_wiz(0);
-
+    Entity wiz1 = game_state->get_wiz(0);
+    Entity wiz2 = game_state->get_wiz(1);
 
     Entity sna = game_state->get_sna(0);
 
     
     Action act;
     act.type = MOVE;
-    act.c = sna.c;
+    act.c = wiz2.c;
+    //act.c.x += 0;
+    act.c.y += 1;
     act.arg = 150;
     for (int i = 0; i < 2; i++)
       {
 	//gamestate
 	act.print();
+	if(i == 1) continue;
+	
 	Collision col_out;
-	if(wiz.collision(sna,col_out,true))
+
+	
+	wiz1.prepare_move(act);
+        wiz2.prepare_move(act);
+
+	if(wiz1.check_collision_walls(col_out))
 	  {
-	    cerr << col_out.time << endl;
+	    //collision dans le tour !
+
+	    wiz1.execute_move(col_out.time);
+	    
+        
+	    wiz1.compute_collision_effect_wall(col_out.wt);
+
+	    wiz1.execute_move(1-col_out.time);
+	  
+	    
+	    wiz1.finish_action();
+	  
+
+	    
+	    cerr << "MUR COLLISION ! " << col_out.time << endl;
 	  }
+	
+	else if(wiz1.collision(wiz2,col_out,false))
+	  {
+	    //collision dans le tour !
+
+	    
+	    cerr << "COLLISION ! " << col_out.time << endl;
+
+
+        
+	    wiz1.execute_move(col_out.time);
+	    wiz2.execute_move(col_out.time);
+        
+	    wiz1.compute_collision_effect(wiz2);
+
+	    wiz1.execute_move(1-col_out.time);
+	    wiz2.execute_move(1-col_out.time);
+	    
+	    wiz1.finish_action();
+	    wiz2.finish_action();
+	  }
+	else
+	  {
+	    //no colision
+	    cerr << "NO " << endl;
+	  }
+
+
+	wiz1.print();
+	wiz2.print();
 
       }
 
