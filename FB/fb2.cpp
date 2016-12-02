@@ -8,7 +8,7 @@
 #include <vector>
 #include <algorithm>
 #include <cassert>
-
+#include <limits>   
 #include <cmath>
 #define MAX_SIZE 10
 using namespace std;
@@ -100,13 +100,27 @@ public:
     switch(this->type)
       {
       case MOVE:
-	cout<<"MOVE "<<this->c.x<<" "<<this->c.y<<" "<<this->arg<<endl;
+	cout<<"MOVE "<<(int)this->c.x<<" "<<(int)this->c.y<<" "<<this->arg<<endl;
 	break;
       case THROW:
-	cout<<"THROW "<<this->c.x<<" "<<this->c.y<<" "<<this->arg<<endl;
+	cout<<"THROW "<<(int)this->c.x<<" "<<(int)this->c.y<<" "<<this->arg<<endl;
 	break;
       }
   }
+
+  void print_debug()
+  {
+    switch(this->type)
+      {
+      case MOVE:
+	cerr<<"MOVE "<<(int)this->c.x<<" "<<(int)this->c.y<<" "<<this->arg<<endl;
+	break;
+      case THROW:
+	cerr<<"THROW "<<(int)this->c.x<<" "<<(int)this->c.y<<" "<<this->arg<<endl;
+	break;
+      }
+  }
+  
 };
 
 class Entity;
@@ -189,10 +203,10 @@ public:
 
   }
 	
-  int get_closest_entity(en_t targetType,GameState *game_state,float *out_dist)
+  /*  int get_closest_entity(en_t targetType,GameState *game_state,float *out_dist)
   {
     //TODO
-  }
+    }*/
 	
   void print()
   {
@@ -479,28 +493,52 @@ public:
   {
 
 
-    assert(act.type == MOVE);
-    assert((this->type == OPPONENT_WIZARD || this->type == WIZARD));
+    //assert(act.type == MOVE);
+    assert(this->type == WIZARD);
 
+    Coordinates cn = Coordinates::compute_norm_vect(this->c,act.c);
 
-    if(this->sna != NULL)
+    if(act.type == MOVE)
       {
-	//we lost sna
+	if(this->sna != NULL)
+	  {
+	    //we lost sna
+	    this->sna->no_colision = false;
+	    this->sna = NULL;
+	    this->state = 0;
+	
+	  }
+
+    
+	
+	cn.x = cn.x*(float)act.arg/weight;
+	cn.y = cn.y*(float)act.arg/weight;
+
+
+	this->vx += cn.x;
+	this->vy += cn.y;
+      }
+    else
+      {
+	//action throw !!
+	assert(this->sna != NULL);
+
+
+	cn.x = cn.x*(float)act.arg/this->sna->weight;
+	cn.y = cn.y*(float)act.arg/this->sna->weight;
+
+
+	this->sna->vx += cn.x;
+	this->sna->vy += cn.y;
+	
 	this->sna->no_colision = false;
 	this->sna = NULL;
 	this->state = 0;
+
 	
+	  
+
       }
-
-    
-    Coordinates cn = Coordinates::compute_norm_vect(this->c,act.c);
-    cn.x = cn.x*(float)act.arg/weight;
-    cn.y = cn.y*(float)act.arg/weight;
-
-
-    this->vx += cn.x;
-    this->vy += cn.y;
-
 
   }
 
@@ -563,6 +601,12 @@ public:
     return list_ent[list_sna[sna_id]];
   }
 
+  inline  const Entity& get_wiz(int wiz_id) const
+  {
+    return list_ent[list_wiz[wiz_id]];
+  }
+
+  
   inline  Entity& get_wiz(int wiz_id)
   {
     return list_ent[list_wiz[wiz_id]];
@@ -663,7 +707,46 @@ public:
 class Simulator 
 {
 public:
+
+
+  Action generate_move_act(const Entity& wiz_ent,int cur_act,int num_act)
+  {
+
+    assert(wiz_ent.type == WIZARD);
+
+    
+    
+    Action act;
  
+    
+    //  (a+rcos(θ+ϕ),b+rsin(θ+ϕ))
+   
+    float section = (2.0*3.14)/num_act;
+
+    float circle = 1000;
+    Coordinates c;
+    act.c.x = wiz_ent.c.x + circle*cos(section*cur_act);
+    act.c.y = wiz_ent.c.y + circle*sin(section*cur_act);
+
+
+    if(wiz_ent.state == 1)
+      {
+	act.arg = 500;
+	act.type = THROW;
+      }
+    else
+      {
+	act.arg = 150;
+	act.type = MOVE;
+      }
+    //act.print_debug();
+    return act;
+
+  }
+
+
+
+  
   GameState predict_state(const GameState &game_state, const Action &a,const Action &b)
   {
     GameState game_state_n = game_state;
@@ -744,8 +827,40 @@ public:
    
     return game_state_n;
   }
+
+
+
+  void get_best_actions(const GameState &game_state,Action &act1_o,Action & act2_o)
+  {
+    const Entity& wiz0 = game_state.get_wiz(0);
+    const Entity& wiz1 = game_state.get_wiz(1);
+    
+    int num_actions = 10;
+
+    float best_eval = numeric_limits<float>::max();
+   
+    
+    for(int i = 0;i<num_actions;++i)
+      {
+	Action act1 = generate_move_act(wiz0,i,num_actions);
+	for(int j=0;j<num_actions;++j)
+	  {
+	    Action act2 = generate_move_act(wiz1,j,num_actions);
+	    GameState gs = predict_state(game_state, act1,act2);
+
+	    float loc_eval = gs.eval();
+	    if(loc_eval< best_eval)
+	      {
+		loc_eval = best_eval;
+		act1_o = act1;
+		act2_o = act2;
+	      }
+	    
+	  }
+      }
+  }
 };
-struct gamestate_queue
+/*struct gamestate_queue
 {
 	
   char size;
@@ -773,7 +888,7 @@ struct gamestate_queue
     char index = (size-offset+front)%MAX_SIZE;
     return g_array[index];
   }
-};
+  };
 class IA_engine
 {
   Simulator simulator;
@@ -782,7 +897,7 @@ class IA_engine
     //return Action(MOVE, 
   }
 	
-};
+  };*/
 
 /**
  * Grab Snaffles and try to throw them through the opponent's goal!
@@ -795,7 +910,7 @@ int main()
   cin >> GameState::team_id; cin.ignore();
 
   // IA_engine ia;
-  gamestate_queue history;
+  // gamestate_queue history;
   GameState game_state_input;
   Simulator sim;
   
@@ -809,26 +924,15 @@ int main()
 
     cerr << "compute new gm" << endl;
 
-    Action act;
-    act.type = MOVE;
-    act.c.x = 5000;
-    act.c.y = 8000;
-    act.arg = 150;
-    
+    Action act1;
+
     Action act2;
-    act2.type = MOVE;
-    act2.c.x = 7919;
-    act2.c.y = -10;
-    act2.arg = 150;
-
-    
-    GameState game_state_n = sim.predict_state(game_state_input,act,act2);
-    
-    
-    game_state_n.print_entities();
 
 
-    act.print();
+ 
+    sim.get_best_actions(game_state_input,act1,act2);
+
+    act1.print();
     act2.print();
   }
 }
