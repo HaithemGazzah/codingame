@@ -245,7 +245,7 @@ public:
       {
 	//left wall
 	float dist_impact = Coordinates::comp_dist(c,Coordinates(this->radius,lc.y));
-	cerr << " LEFT " << " " << total_dist << " " << dist_impact <<endl;
+	//cerr << " LEFT " << " " << total_dist << " " << dist_impact <<endl;
 	time = dist_impact/total_dist;
 	col_out = Collision(this,L_WALL , time);
 	
@@ -257,7 +257,7 @@ public:
 	//right wall
 	
 	float dist_impact = Coordinates::comp_dist(c,Coordinates(16001 - this->radius,lc.y));
-	cerr << " RIGHT " << " " << total_dist << " " << dist_impact <<endl;
+	//cerr << " RIGHT " << " " << total_dist << " " << dist_impact <<endl;
 	if(dist_impact/total_dist < time)
 	  {
 	    time = dist_impact/total_dist;
@@ -271,7 +271,7 @@ public:
 	//top wall
 
 	float	dist_impact = Coordinates::comp_dist(c,Coordinates(lc.x,this->radius));
-		cerr << " TOP " << " " << total_dist << " " << dist_impact <<endl;
+//		cerr << " TOP " << " " << total_dist << " " << dist_impact <<endl;
 	if(dist_impact/total_dist < time)
 	  {
 	    time = dist_impact/total_dist;
@@ -284,7 +284,7 @@ public:
 	//bottom wall
 	float dist_impact = Coordinates::comp_dist(c,Coordinates(lc.x,7501 -this->radius));
 	
-	cerr << " BOTO " << " " << total_dist << " " << dist_impact <<endl;
+	//cerr << " BOTO " << " " << total_dist << " " << dist_impact <<endl;
 	if(dist_impact/total_dist < time)
 	  {
 	    time = dist_impact/total_dist;
@@ -678,24 +678,71 @@ public:
     //first approach, good score if snafles are at the right side
     // if 0 you need to score on the right of the map, if 1 you need to score on the left
 
-    int num_sna = 0;
+
+    // better to have sna in my zone
+    float num_sna_l = 0;
     if(team_id == 0)
       {
 	for(int i = 0;i<num_sna;++i)
 	  {
-	    if(get_sna(i).c.x >8000) ++num_sna;
+	    if(get_sna(i).c.x >13000 && get_sna(i).c.y >1750 && get_sna(i).c.y<5750) ++num_sna_l;
 	  }
       }
     else
       {
 	for(int i = 0;i<num_sna;++i)
 	  {
-	    if(get_sna(i).c.x <8000) ++num_sna;
+	    if(get_sna(i).c.x <3000 && get_sna(i).c.y >1750 && get_sna(i).c.y<5750 ) ++num_sna_l;
 	  }
       }
 
 
-    return num_sna;
+    //very good to put sna on goal !
+    float sna_goal = 0;
+    for(int i =0;i<num_sna;++i)
+      {
+	//predict the dest :
+	Coordinates c = get_sna(i).c;
+
+	c.x += get_sna(i).vx;
+	c.y += get_sna(i).vy;
+
+	if(c.y >1750 && c.y<5750)
+	  {
+	    if(team_id == 0 && c.x >=16000)
+	      {
+		sna_goal += 20;
+	      }
+	    else if(team_id == 1 && c.x <= 0)
+	      {
+		sna_goal += 20;
+	      }
+	  }
+      }
+
+
+    //Good score si on se raproche d'un sna
+
+    float close_sna_score = 0;
+
+    float dist[2] = {0,0};
+    
+    for(int i=0;i<2;++i)
+      {
+	float clos = 100000;
+	for(int j=0;j<num_sna;++j)
+	  {
+	    float lc = Coordinates::comp_dist2(get_wiz(i).c,get_sna(j).c);
+	    if(lc < clos)
+	      {
+		clos = lc;
+		dist[i] = lc;
+	      }
+	  }
+      }
+
+    close_sna_score = dist[0] + dist[1];
+    return num_sna_l + sna_goal + close_sna_score;
     
   }
 
@@ -830,15 +877,20 @@ public:
 
 
 
-  void get_best_actions(const GameState &game_state,Action &act1_o,Action & act2_o)
+  float get_best_actions(const GameState &game_state,
+			 Action &act1_o,
+			 Action & act2_o//,
+			 /*	 int cur_dep,
+				 int max_dep*/)
   {
     const Entity& wiz0 = game_state.get_wiz(0);
     const Entity& wiz1 = game_state.get_wiz(1);
     
     int num_actions = 10;
 
-    float best_eval = numeric_limits<float>::max();
+    float best_eval = -10000; //numeric_limits<float>::min();
    
+    Action loc_1,loc2;
     
     for(int i = 0;i<num_actions;++i)
       {
@@ -848,16 +900,26 @@ public:
 	    Action act2 = generate_move_act(wiz1,j,num_actions);
 	    GameState gs = predict_state(game_state, act1,act2);
 
+	    
+	    // get_best_actions(gs,act1,act2,cur_dep + 1 ,max_dep)
+	    
+	    
 	    float loc_eval = gs.eval();
-	    if(loc_eval< best_eval)
+	   // cerr << "l e " << loc_eval << endl;
+	    if(loc_eval > best_eval)
 	      {
-		loc_eval = best_eval;
+	        //  cerr << "yo " << endl;
+		best_eval = loc_eval;
+		/*loc_1 = act1;
+		  loc_2 = act2;*/
 		act1_o = act1;
 		act2_o = act2;
+		
 	      }
 	    
 	  }
       }
+    return best_eval;
   }
 };
 /*struct gamestate_queue
