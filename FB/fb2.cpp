@@ -226,7 +226,7 @@ public:
     float time = 2;
     
     
-    cerr << total_dist << "  " << lc.x <<" " <<  " " <<lc.y << endl;
+    // cerr << total_dist << "  " << lc.x <<" " <<  " " <<lc.y << endl;
     if(lc.x - this->radius < 0 )
       {
 	//left wall
@@ -268,7 +268,7 @@ public:
     if(lc.y + this->radius > 7501)
       {
 	//bottom wall
-	float dist_impact = Coordinates::comp_dist(c,Coordinates(lc.x-this->radius,7501));
+	float dist_impact = Coordinates::comp_dist(c,Coordinates(lc.x,7501 -this->radius));
 	
 	cerr << " BOTO " << " " << total_dist << " " << dist_impact <<endl;
 	if(dist_impact/total_dist < time)
@@ -279,7 +279,7 @@ public:
       }
 
 
-    if(time >= 2)
+    if(time > 1)
       return false; //no collision with a wall
     else
       return true;
@@ -563,7 +563,7 @@ public:
     return list_ent[list_sna[sna_id]];
   }
 
-  inline const Entity& get_wiz(int wiz_id) const
+  inline  Entity& get_wiz(int wiz_id)
   {
     return list_ent[list_wiz[wiz_id]];
   }
@@ -668,8 +668,8 @@ public:
   {
     GameState game_state_n = game_state;
 
-    Entity wiz1 = game_state_n.get_wiz(0);
-    Entity wiz2 = game_state_n.get_wiz(1);
+    Entity &wiz1 = game_state_n.get_wiz(0);
+    Entity &wiz2 = game_state_n.get_wiz(1);
 
     wiz1.prepare_move(a);
     wiz2.prepare_move(b);
@@ -689,7 +689,7 @@ public:
 	    //check i with wall
 	    Collision col_out;
 	    if(game_state_n.list_ent[i].check_collision_walls(col_out))
-	      if(col_out.time + t < 1.0 && col_out.time < firstCollision.time)
+	      if(col_out.time != 0 && col_out.time + t < 1.0 && col_out.time < firstCollision.time)
 		firstCollision = col_out;
 		  
 	      
@@ -697,7 +697,7 @@ public:
 	      {
                 Collision col_out;
 		if(game_state_n.list_ent[i].collision(game_state_n.list_ent[j],col_out))
-		  if(col_out.time + t < 1.0 && col_out.time < firstCollision.time)
+		  if(col_out.time != 0 && col_out.time + t < 1.0 && col_out.time < firstCollision.time)
 		    firstCollision = col_out;   
 
 
@@ -731,6 +731,7 @@ public:
 	    else
 	      firstCollision.a->compute_collision_effect_wall(firstCollision.wt);
 
+	    
             t += firstCollision.time;
         }
     }
@@ -741,7 +742,7 @@ public:
 	game_state_n.list_ent[i].finish_action();
       }
    
-    
+    return game_state_n;
   }
 };
 struct gamestate_queue
@@ -793,91 +794,41 @@ int main()
   // if 0 you need to score on the right of the map, if 1 you need to score on the left
   cin >> GameState::team_id; cin.ignore();
 
-  IA_engine ia;
+  // IA_engine ia;
   gamestate_queue history;
-  GameState *game_state;
+  GameState game_state_input;
+  Simulator sim;
+  
   // game loop
   while (1) {
-    game_state = new GameState();
-    game_state->create_entity_from_input();
-    game_state->print_entities();
-
-    Entity wiz1 = game_state->get_wiz(0);
-    Entity wiz2 = game_state->get_wiz(1);
-
-    Entity sna = game_state->get_sna(0);
-
     
+    game_state_input.create_entity_from_input();
+    game_state_input.print_entities();
+
+
+
+    cerr << "compute new gm" << endl;
+
     Action act;
     act.type = MOVE;
-    act.c = wiz2.c;
-    //act.c.x += 0;
-    act.c.y += 1;
+    act.c.x = 5000;
+    act.c.y = 8000;
     act.arg = 150;
-    for (int i = 0; i < 2; i++)
-      {
-	//gamestate
-	act.print();
-	if(i == 1) continue;
-	
-	Collision col_out;
+    
+    Action act2;
+    act2.type = MOVE;
+    act2.c.x = 7919;
+    act2.c.y = -10;
+    act2.arg = 150;
 
-	
-	wiz1.prepare_move(act);
-        wiz2.prepare_move(act);
-
-	if(wiz1.check_collision_walls(col_out))
-	  {
-	    //collision dans le tour !
-
-	    wiz1.execute_move(col_out.time);
-	    
-        
-	    wiz1.compute_collision_effect_wall(col_out.wt);
-
-	    wiz1.execute_move(1-col_out.time);
-	  
-	    
-	    wiz1.finish_action();
-	  
-
-	    
-	    cerr << "MUR COLLISION ! " << col_out.time << endl;
-	  }
-	
-	else if(wiz1.collision(wiz2,col_out))
-	  {
-	    //collision dans le tour !
-
-	    
-	    cerr << "COLLISION ! " << col_out.time << endl;
+    
+    GameState game_state_n = sim.predict_state(game_state_input,act,act2);
+    
+    
+    game_state_n.print_entities();
 
 
-        
-	    wiz1.execute_move(col_out.time);
-	    wiz2.execute_move(col_out.time);
-        
-	    wiz1.compute_collision_effect(wiz2);
-
-	    wiz1.execute_move(1-col_out.time);
-	    wiz2.execute_move(1-col_out.time);
-	    
-	    wiz1.finish_action();
-	    wiz2.finish_action();
-	  }
-	else
-	  {
-	    //no colision
-	    cerr << "NO " << endl;
-	  }
-
-
-	wiz1.print();
-	wiz2.print();
-
-      }
-
-
-    history.insert(game_state);
+    act.print();
+    act2.print();
   }
 }
