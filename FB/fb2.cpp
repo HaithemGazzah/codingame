@@ -141,6 +141,9 @@ public:
   float radius;
   int state;
   en_t type;
+  //Entity *sna_hosted_by = NULL; //id of the wiz which hosts the sna if type == 1
+  Entity *sna = NULL; //id of the sna for the wiz
+  bool no_colision = false; //a sna attached to a snaffle has no col
   Entity()
   {
   }
@@ -208,6 +211,8 @@ public:
   bool check_collision_walls(Collision &col_out)
   {
 
+    if(this->no_colision)
+      return false; //one of the ent is a sna captured by a wiz --> no col !
     //this is a wall !!
     Coordinates lc;
     lc = c;
@@ -282,21 +287,29 @@ public:
   }
 
   //check if a collision can happen between this and u
-  bool collision(Entity &u,Collision &col_out,bool is_point) 
+  bool collision(Entity &u,Collision &col_out) 
   {
 
 
- 
+
+    if(u.no_colision || this->no_colision)
+      return false; //one of the ent is a sna captured by a wiz --> no col !
     
     // Distance carré
     float dist = comp_dist_to_2(u);
-
-    // Somme des rayons au carré
     float sr;
-    if(!is_point)
-      sr = (this->radius + u.radius)*(this->radius + u.radius);
+
+    //somme rayons carrés
+
+
+    
+    if((this->type == OPPONENT_WIZARD || this->type == WIZARD) && u.type == SNAFFLE)
+      sr = (this->radius)*(this->radius); //point collision if snaffle
+    else if (this->type == SNAFFLE && (u.type == OPPONENT_WIZARD || u.type == WIZARD))
+      sr = (u.radius)*(u.radius); //point collision if snaffle
     else
-      sr = (this->radius)*(this->radius);
+      sr = (this->radius + u.radius)*(this->radius + u.radius); //non wiz - snafle collision
+    
 
     // On prend tout au carré pour éviter d'avoir à appeler un sqrt inutilement. C'est mieux pour les performances
 
@@ -395,6 +408,23 @@ public:
 	u.c  = this->c;
 	u.vx = this->vx;
 	u.vy = this->vy;
+	u.no_colision = true;
+	this->sna = &u;
+
+	this->state = 1;
+	
+      }
+    else if ((u.type == WIZARD ||u.type == OPPONENT_WIZARD ) && this->type == SNAFFLE)
+      {
+	this->c  = u.c;
+	this->vx = u.vx;
+	this->vy = u.vy;
+
+	this->no_colision = true;
+	u.sna = this;
+
+	u.state = 1;
+	
       }
     else
       {
@@ -450,6 +480,19 @@ public:
 
 
     assert(act.type == MOVE);
+    assert((this->type == OPPONENT_WIZARD || this->type == WIZARD));
+
+
+    if(this->sna != NULL)
+      {
+	//we lost sna
+	this->sna->no_colision = false;
+	this->sna = NULL;
+	this->state = 0;
+	
+      }
+
+    
     Coordinates cn = Coordinates::compute_norm_vect(this->c,act.c);
     cn.x = cn.x*(float)act.arg/weight;
     cn.y = cn.y*(float)act.arg/weight;
@@ -464,8 +507,13 @@ public:
 
   void execute_move(float t)
   {
+
+
+      
+
     this->c.x += this->vx * t;
     this->c.y += this->vy * t;
+      
   }
 
 
@@ -478,6 +526,18 @@ public:
     this->vx = round(this->vx * friction);
     this->vy = round(this->vy * friction);
 
+    /*   if(this->type == SNAFFLE && this->no_colision)
+      {
+	this->no_colision = false; //after a turn, snaffle are released
+	this->sna_hosted_by = NULL;
+      }
+
+    if((this->type == OPPONENT_WIZARD || this->type == WIZARD) && this->sna != NULL)
+      {
+	this->sna = NULL; //after a turn, sna released
+	
+	}*/
+      
   }
  
 };
@@ -531,6 +591,17 @@ public:
 	{
 	  list_ent[i].setProperties(entityId, SNAFFLE ,x ,y ,vx ,vy ,state);
 	  list_sna[sna_count++]=i;
+	  //check if a snaffle belongs to a WIZARD
+	  for(int ii=0;ii<4;++ii)
+	    {
+	      if(list_ent[ii].state == 1 && list_ent[ii].vx == list_ent[i].vx && list_ent[ii].vy == list_ent[i].vy)
+		{
+		  //ok le snaffle est attaché
+		  //list_ent[i].sna_hosted_by = &list_ent[ii];
+		  list_ent[ii].sna = &list_ent[i];
+		  list_ent[ii].no_colision = true;
+		}
+	    }
 	}
       else if (entityType.compare("WIZARD") == 0)
 	{
@@ -625,7 +696,7 @@ public:
 	    for (int j = i + 1; j < num_ent; ++j)
 	      {
                 Collision col_out;
-		if(game_state_n.list_ent[i].collision(game_state_n.list_ent[j],col_out,false))
+		if(game_state_n.list_ent[i].collision(game_state_n.list_ent[j],col_out))
 		  if(col_out.time + t < 1.0 && col_out.time < firstCollision.time)
 		    firstCollision = col_out;   
 
@@ -774,7 +845,7 @@ int main()
 	    cerr << "MUR COLLISION ! " << col_out.time << endl;
 	  }
 	
-	else if(wiz1.collision(wiz2,col_out,false))
+	else if(wiz1.collision(wiz2,col_out))
 	  {
 	    //collision dans le tour !
 
