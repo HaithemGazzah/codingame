@@ -55,7 +55,7 @@ public:
 	if(matrix_max[0][i].line != -2)
 	  return matrix_max[0][i];
       }
-    throw string("euhhh search coordmax");
+    throw string("unexpected error search coordmax");
   }
 
 
@@ -115,7 +115,7 @@ public:
   inline void push_back(const T &e)
   {
     
-    if(index >= 20) throw string("heuuu sup 20");
+    if(index >= 20) throw string("unexpected: sup 20");
     tab[index++] = e;
   }
 
@@ -196,7 +196,7 @@ public:
 			 matrix_score &ms,
 			 int chain_score,
 			 int max_depth,
-			 int max_depth_aleat)  //return une colonne et une orientation pour le 0th truc qui arrive
+			 int max_depth_aleat)  //return une colonne et une orientation pour le 0th qui arrive
   {
 
     //    if(depth == max_depth)
@@ -205,7 +205,7 @@ public:
 
 
   
-    int min_i,max_i,min_j,max_j; //big bricolage...
+    int min_i,max_i,min_j,max_j; //code should be cleaner
 
     if(depth < max_depth)
       {
@@ -237,18 +237,14 @@ public:
 	  int score;
 
 
-	  //  	  cerr << " GRID AVANT"<< endl;
-	  //step_grid.print_grid();
+
 	  
 	  compute_configuration_score_and_grid(pb.pb[depth],
 					       i,
 					       j,
 					       step_grid,
 					       &score);
-	  //  cerr << " GRID APRES"<< endl;
-	  //step_grid.print_grid();
-	  
-	  //  cerr << " SCORE " << score << " " << pb.pb[depth].ca << ", " << pb.pb[depth].cb << " col " << j << " or " << i << endl;
+
 	  ms.current_line[depth] = coord_b(j,i);
 	 
 
@@ -462,8 +458,8 @@ public:
 	  
 	}
 
-    //ok maintenant faut degager tous les visited qui on un visited code dans la liste
-    if(lgi.size() > 0) //on a found au moin un groupe, donc on met a jour la grid et on compute le score
+    //ok maintenant il faut eliminer les visited qui ont un visited code dans la liste
+    if(lgi.size() > 0) //on a trouvé au moins un groupe, donc on met a jour la grid et on compute le score
       {
 	for(int i=0;i<12;++i)
 	  for(int j=0;j<6;++j)
@@ -530,7 +526,7 @@ public:
 	    break;
 
 	  default:
-	    throw string("heuu, bonus color");
+	    throw string("bonus color");
 	
 	  }
 
@@ -628,22 +624,7 @@ int main()
     grid g_adv(cin);
   
 
-    /*  cerr << " ******************  print " << endl;
-    g_m.print_grid();
 
-    int score;
-    g_m.search_and_update_one_step(g_m,0,&score);
-
-    cerr << "score : " << score << endl;
-
-    cerr << " ******************  print 2222222222 " << endl;
-    g_m.print_grid();
-    //pbl.print();
-
-
-    return 0;*/
-    //   int orien = (int)((rot++)%4);
-    //g_m.create_new_grid(pbl.pb[0],orien,2);
 
 
     matrix_score ms_m,ms_adv;
