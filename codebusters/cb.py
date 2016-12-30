@@ -55,7 +55,7 @@ class HelpBust:
 
         if dist(self.agent.bust.coord,self.msg.phan.coord) < 10:
             #ok sur zone
-            #action de base on chope phantome
+            #action de base on prend phantome
             self.agent.action_planed = TakePhantom(self.agent,self.msg.phan.id)
 
             
